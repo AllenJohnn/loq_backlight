@@ -18,9 +18,16 @@ Status: proposal. Items marked **[unverified]** must be confirmed on the target 
 
 Recommendation: start with `System.Management` behind `ILightingBackend`. Switching later is a one-class change.
 
-## 3. Administrator rights **[unverified]**
+## 3. Administrator rights
 
-Do not assume either way. Test non-elevated PowerShell first:
+**Measured:** non-elevated PowerShell gets `Access denied` when opening `root\WMI` / `LENOVO_LIGHTING_METHOD`. Elevated behaviour is still to be confirmed.
+
+Design consequences:
+
+- **Phase 2-4:** the Probe CLI and app run elevated (`requireAdministrator` in the app manifest). Simple and honest.
+- **Later option:** split into an unelevated UI plus a small elevated background service/scheduled task, talking over a named pipe. This also fixes "auto-start at login" (a `requireAdministrator` app cannot start from the normal Run key without a UAC prompt; use a scheduled task with highest privileges instead). Worth the complexity only after the core works.
+
+Original test, kept for reference:
 
 ```powershell
 $wmi = Get-WmiObject -Namespace "root\WMI" -Class "LENOVO_LIGHTING_METHOD"
