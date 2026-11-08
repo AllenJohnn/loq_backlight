@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LoqLighting.App.Models;
+using LoqLighting.App.Services;
 using LoqLighting.Backend.Wmi;
 using LoqLighting.Core;
 using LoqLighting.Core.Effects;
@@ -12,6 +13,7 @@ public partial class MainViewModel : ObservableObject, IAsyncDisposable
 {
     private readonly ILightingBackend _backend;
     private readonly LightingEngine _engine;
+    private readonly ProfileService _profileService;
 
     [ObservableProperty]
     private string _currentLevelText = "Reading...";
@@ -30,6 +32,15 @@ public partial class MainViewModel : ObservableObject, IAsyncDisposable
 
     [ObservableProperty]
     private string _statusMessage = "Ready";
+
+    // Profiles
+    public ObservableCollection<LightingProfile> Profiles { get; } = new();
+
+    [ObservableProperty]
+    private LightingProfile? _selectedProfile;
+
+    [ObservableProperty]
+    private string _profileNameInput = "";
 
     // Live Status Panel
     [ObservableProperty]
@@ -86,10 +97,11 @@ public partial class MainViewModel : ObservableObject, IAsyncDisposable
 
     public ObservableCollection<EffectItem> AvailableEffects { get; } = new();
 
-    public MainViewModel(ILightingBackend? backend = null)
+    public MainViewModel(ILightingBackend? backend = null, ProfileService? profileService = null)
     {
         _backend = backend ?? new LenovoWmiBackend();
         _engine = new LightingEngine(_backend);
+        _profileService = profileService ?? new ProfileService();
 
         _engine.Faulted += OnEngineFaulted;
 
@@ -101,6 +113,110 @@ public partial class MainViewModel : ObservableObject, IAsyncDisposable
         AvailableEffects.Add(new EffectItem("Random flash", "Stepped pseudo-random flashes using hardware brightness levels.", new RandomFlashEffect()));
 
         SelectedEffect = AvailableEffects[0];
+
+        LoadProfiles();
+    }
+
+    public void LoadProfiles()
+    {
+        Profiles.Clear();
+        var all = _profileService.LoadAllProfiles();
+        foreach (var p in all)
+        {
+            Profiles.Add(p);
+        }
+
+        string? lastUsed = _profileService.GetLastUsedProfileName();
+        if (!string.IsNullOrEmpty(lastUsed))
+        {
+            var match = Profiles.FirstOrDefault(p => string.Equals(p.Name, lastUsed, StringComparison.OrdinalIgnoreCase));
+            if (match != null)
+            {
+                SelectedProfile = match;
+                ApplyProfile(match);
+                return;
+            }
+        }
+
+        if (Profiles.Count > 0 && SelectedProfile == null)
+        {
+            SelectedProfile = Profiles[0];
+            ApplyProfile(Profiles[0]);
+        }
+    }
+
+    partial void OnSelectedProfileChanged(LightingProfile? value)
+    {
+        if (value != null)
+        {
+            ProfileNameInput = value.Name;
+            ApplyProfile(value);
+            _profileService.SaveLastUsedProfileName(value.Name);
+        }
+    }
+
+    public void ApplyProfile(LightingProfile profile)
+    {
+        var matchedEffect = AvailableEffects.FirstOrDefault(e => string.Equals(e.Name, profile.EffectName, StringComparison.OrdinalIgnoreCase));
+        if (matchedEffect != null)
+        {
+            SelectedEffect = matchedEffect;
+        }
+
+        Speed = profile.Speed;
+        IsInfiniteDuration = profile.IsInfiniteDuration;
+        RunDurationSeconds = profile.RunDurationSeconds;
+        PauseDurationMs = profile.PauseDurationMs;
+        SelectedHighLevel = profile.HighLevel;
+        SelectedLowLevel = profile.LowLevel;
+    }
+
+    [RelayCommand]
+    public void SaveCurrentProfile()
+    {
+        string name = string.IsNullOrWhiteSpace(ProfileNameInput)
+            ? (SelectedProfile?.Name ?? "Custom Profile")
+            : ProfileNameInput.Trim();
+
+        var profile = new LightingProfile
+        {
+            Name = name,
+            EffectName = SelectedEffect?.Name ?? "Strobe",
+            Speed = Speed,
+            IsInfiniteDuration = IsInfiniteDuration,
+            RunDurationSeconds = RunDurationSeconds,
+            PauseDurationMs = PauseDurationMs,
+            HighLevel = SelectedHighLevel,
+            LowLevel = SelectedLowLevel
+        };
+
+        _profileService.SaveProfile(profile);
+
+        Profiles.Clear();
+        foreach (var p in _profileService.LoadAllProfiles())
+        {
+            Profiles.Add(p);
+        }
+
+        SelectedProfile = Profiles.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+        StatusMessage = $"Saved profile '{name}'";
+    }
+
+    [RelayCommand]
+    public void DeleteCurrentProfile()
+    {
+        if (SelectedProfile == null) return;
+
+        string name = SelectedProfile.Name;
+        _profileService.DeleteProfile(name);
+
+        Profiles.Remove(SelectedProfile);
+        SelectedProfile = Profiles.FirstOrDefault();
+        if (SelectedProfile != null)
+        {
+            ApplyProfile(SelectedProfile);
+        }
+        StatusMessage = $"Deleted profile '{name}'";
     }
 
     partial void OnSelectedEffectChanged(EffectItem? value)

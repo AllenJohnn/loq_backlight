@@ -111,6 +111,45 @@
             <ui:Card Grid.Column="2" Padding="18">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel>
+                        <!-- Profiles Section -->
+                        <StackPanel Margin="0,0,0,14">
+                            <ui:TextBlock Text="Profiles" FontTypography="Subtitle" Margin="0,0,0,10" />
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="8" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <ComboBox Grid.Column="0"
+                                          ItemsSource="{Binding Profiles}"
+                                          SelectedItem="{Binding SelectedProfile, Mode=TwoWay}"
+                                          DisplayMemberPath="Name"
+                                          HorizontalAlignment="Stretch" />
+                                <ui:Button Grid.Column="2"
+                                           Icon="{ui:SymbolIcon Delete20}"
+                                           Command="{Binding DeleteCurrentProfileCommand}"
+                                           ToolTip="Delete selected profile"
+                                           Appearance="Danger" />
+                            </Grid>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="8" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <ui:TextBox Grid.Column="0"
+                                            Text="{Binding ProfileNameInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                            PlaceholderText="Profile name..." />
+                                <ui:Button Grid.Column="2"
+                                           Content="Save"
+                                           Icon="{ui:SymbolIcon Save20}"
+                                           Command="{Binding SaveCurrentProfileCommand}" />
+                            </Grid>
+                        </StackPanel>
+
+                        <Separator Margin="0,4,0,14" />
+
                         <ui:TextBlock Text="Effect Controls" FontTypography="Subtitle" Margin="0,0,0,16" />
 
                         <!-- Speed Slider -->
