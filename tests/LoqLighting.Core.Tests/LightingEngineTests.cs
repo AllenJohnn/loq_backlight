@@ -151,4 +151,32 @@ public class LightingEngineTests
         Assert.False(engine.IsRunning);
         Assert.True(backend.RestoreCallCount >= 1);
     }
+
+    [Fact]
+    public async Task RestoreAsyncFailure_RaisesFaultedEvent()
+    {
+        var expectedEx = new InvalidOperationException("Restore failure");
+        var backend = new FakeBackend
+        {
+            CurrentState = new LightingState(Brightness.High, 0, 3),
+            ThrowOnRestore = true,
+            RestoreException = expectedEx
+        };
+
+        await using var engine = new LightingEngine(backend);
+
+        var tcs = new TaskCompletionSource<Exception>();
+        engine.Faulted += (sender, ex) => tcs.TrySetResult(ex);
+
+        var effect = new SimpleEffect(new Step(Brightness.Low, TimeSpan.FromMilliseconds(50)));
+        await engine.StartAsync(effect);
+
+        await engine.StopAsync();
+
+        var completed = await Task.WhenAny(tcs.Task, Task.Delay(2000));
+        Assert.Same(tcs.Task, completed);
+
+        var ex = await tcs.Task;
+        Assert.Same(expectedEx, ex);
+    }
 }

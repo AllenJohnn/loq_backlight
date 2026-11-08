@@ -23,6 +23,9 @@ public class FakeBackend : ILightingBackend
     public bool ThrowOnWrite { get; set; }
     public Exception? WriteException { get; set; }
 
+    public bool ThrowOnRestore { get; set; }
+    public Exception? RestoreException { get; set; }
+
     public Task<LightingState> ReadAsync(CancellationToken ct = default)
     {
         return Task.FromResult(CurrentState);
@@ -44,6 +47,11 @@ public class FakeBackend : ILightingBackend
     public Task RestoreAsync(LightingState state, CancellationToken ct = default)
     {
         RestoreCallCount++;
+        if (ThrowOnRestore)
+        {
+            throw RestoreException ?? new InvalidOperationException("FakeBackend restore failure");
+        }
+
         RestoredStates.Add(state);
         CurrentState = state;
         return Task.CompletedTask;

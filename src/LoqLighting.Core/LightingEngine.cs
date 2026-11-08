@@ -170,9 +170,9 @@ public class LightingEngine : IAsyncDisposable
             {
                 await _backend.RestoreAsync(snapshot, CancellationToken.None).ConfigureAwait(false);
             }
-            catch
+            catch (Exception ex)
             {
-                // Prevent restore failure from hiding loop status
+                faultException = faultException != null ? new AggregateException(faultException, ex) : ex;
             }
 
             if (faultException != null)
