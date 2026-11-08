@@ -97,6 +97,8 @@ public partial class MainViewModel : ObservableObject, IAsyncDisposable
 
     public ObservableCollection<EffectItem> AvailableEffects { get; } = new();
 
+    private bool _wasRunningBeforeSuspend;
+
     public MainViewModel(ILightingBackend? backend = null, ProfileService? profileService = null)
     {
         _backend = backend ?? new LenovoWmiBackend();
@@ -104,6 +106,7 @@ public partial class MainViewModel : ObservableObject, IAsyncDisposable
         _profileService = profileService ?? new ProfileService();
 
         _engine.Faulted += OnEngineFaulted;
+        Microsoft.Win32.SystemEvents.PowerModeChanged += OnPowerModeChanged;
 
         AvailableEffects.Add(new EffectItem("Strobe", "Rapid stepped switching between high and low levels.", new StrobeEffect()));
         AvailableEffects.Add(new EffectItem("Strobe with pause", "Stepped strobe pulse bursts separated by a resting pause.", new StrobeWithPauseEffect()));
@@ -350,8 +353,39 @@ public partial class MainViewModel : ObservableObject, IAsyncDisposable
         }
     }
 
+    private async void OnPowerModeChanged(object sender, Microsoft.Win32.PowerModeChangedEventArgs e)
+    {
+        try
+        {
+            if (e.Mode == Microsoft.Win32.PowerModes.Suspend)
+            {
+                if (IsRunning)
+                {
+                    _wasRunningBeforeSuspend = true;
+                    await StopEffectAsync();
+                }
+            }
+            else if (e.Mode == Microsoft.Win32.PowerModes.Resume)
+            {
+                await Task.Delay(1000); // Allow hardware/EC to settle after resume
+                await RefreshCurrentStateAsync();
+
+                if (_wasRunningBeforeSuspend)
+                {
+                    _wasRunningBeforeSuspend = false;
+                    await StartEffectAsync();
+                }
+            }
+        }
+        catch
+        {
+            // Suppress unhandled errors during power transitions
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
+        Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged;
         _engine.Faulted -= OnEngineFaulted;
         await _engine.DisposeAsync();
         await _backend.DisposeAsync();
