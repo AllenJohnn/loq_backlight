@@ -1,5 +1,6 @@
 ﻿using LoqLighting.Backend.Wmi;
 using LoqLighting.Core;
+using LoqLighting.Core.Effects;
 
 namespace LoqLighting.Probe;
 
@@ -25,6 +26,7 @@ internal static class Program
                 "set" => await HandleSetAsync(backend, args.Length > 1 ? args[1] : null),
                 "cycle" => await HandleCycleAsync(backend),
                 "probe-off" => await HandleProbeOffAsync(backend),
+                "play" => await HandlePlayAsync(backend, args),
                 _ => HandleUnknownCommand(command)
             };
         }
@@ -379,6 +381,120 @@ internal static class Program
         return passed ? 0 : 1;
     }
 
+    private static async Task<int> HandlePlayAsync(ILightingBackend backend, string[] args)
+    {
+        if (args.Length < 2)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine("[FAIL] Missing effect name for 'play' command.");
+            Console.ResetColor();
+            Console.WriteLine("Usage: LoqLighting.Probe play <effect> [--speed 1.0] [--seconds 10]");
+            Console.WriteLine("Available effects: strobe, strobewithpause, breathing, heartbeat, wave, randomflash");
+            return 1;
+        }
+
+        string effectName = args[1].ToLowerInvariant();
+        IEffect? effect = effectName switch
+        {
+            "strobe" => new StrobeEffect(),
+            "strobewithpause" or "strobe-with-pause" => new StrobeWithPauseEffect(),
+            "breathing" or "breathe" => new BreathingEffect(),
+            "heartbeat" => new HeartbeatEffect(),
+            "wave" => new WaveEffect(),
+            "randomflash" or "random-flash" => new RandomFlashEffect(),
+            _ => null
+        };
+
+        if (effect == null)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"[FAIL] Unknown effect '{args[1]}'.");
+            Console.ResetColor();
+            Console.WriteLine("Available effects: strobe, strobewithpause, breathing, heartbeat, wave, randomflash");
+            return 1;
+        }
+
+        double speed = 1.0;
+        TimeSpan? duration = null;
+
+        for (int i = 2; i < args.Length; i++)
+        {
+            if (args[i].Equals("--speed", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+            {
+                if (double.TryParse(args[++i], System.Globalization.CultureInfo.InvariantCulture, out double parsedSpeed))
+                {
+                    speed = parsedSpeed;
+                }
+            }
+            else if ((args[i].Equals("--seconds", StringComparison.OrdinalIgnoreCase) ||
+                      args[i].Equals("-s", StringComparison.OrdinalIgnoreCase)) && i + 1 < args.Length)
+            {
+                if (double.TryParse(args[++i], System.Globalization.CultureInfo.InvariantCulture, out double secs))
+                {
+                    duration = TimeSpan.FromSeconds(secs);
+                }
+            }
+        }
+
+        var settings = new EffectSettings
+        {
+            Speed = speed,
+            RunDuration = duration
+        };
+
+        await using var engine = new LightingEngine(backend);
+        engine.Faulted += (s, ex) =>
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"\n[FAULT] Lighting engine faulted: {ex.Message}");
+            Console.ResetColor();
+        };
+
+        using var stopCts = new CancellationTokenSource();
+        ConsoleCancelEventHandler cancelHandler = (s, e) =>
+        {
+            e.Cancel = true;
+            Console.WriteLine();
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine("[INFO] Ctrl+C interrupt detected. Stopping animation...");
+            Console.ResetColor();
+            stopCts.Cancel();
+        };
+
+        Console.CancelKeyPress += cancelHandler;
+
+        try
+        {
+            Console.WriteLine($"[INFO] Starting playback of effect '{effect.Name}'...");
+            Console.WriteLine($"[INFO] Settings: Speed={settings.Speed}x, Duration={(duration.HasValue ? $"{duration.Value.TotalSeconds}s" : "infinite (Press Ctrl+C to stop)")}");
+
+            await engine.StartAsync(effect, settings, stopCts.Token);
+
+            while (engine.IsRunning && !stopCts.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(100, stopCts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+            }
+        }
+        finally
+        {
+            Console.CancelKeyPress -= cancelHandler;
+            Console.WriteLine("[INFO] Stopping engine and restoring original brightness...");
+            await engine.StopAsync();
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("[PASS] Effect stopped and original brightness restored successfully.");
+            Console.ResetColor();
+        }
+
+        return 0;
+    }
+
     private static int HandleUnknownCommand(string command)
     {
         Console.ForegroundColor = ConsoleColor.Red;
@@ -396,5 +512,6 @@ internal static class Program
         Console.WriteLine("  LoqLighting.Probe set low|high   - Set backlight brightness to low or high");
         Console.WriteLine("  LoqLighting.Probe cycle          - Snapshot state, test Low, test High, restore original");
         Console.WriteLine("  LoqLighting.Probe probe-off      - Experimental probe of candidate raw value 1 (Off)");
+        Console.WriteLine("  LoqLighting.Probe play <effect>  - Play an effect [--speed 1.0] [--seconds 10]");
     }
 }
