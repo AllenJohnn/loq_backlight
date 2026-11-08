@@ -179,4 +179,32 @@ public class LightingEngineTests
         var ex = await tcs.Task;
         Assert.Same(expectedEx, ex);
     }
+
+    [Fact]
+    public async Task RunDuration_EndsPromptly_DelayingMinHoldAndRemaining()
+    {
+        var backend = new FakeBackend { CurrentState = new LightingState(Brightness.High, 0, 3) };
+        await using var engine = new LightingEngine(backend);
+
+        // Single step with large hold (1000 ms), but RunDuration is 100 ms
+        var effect = new SimpleEffect(new Step(Brightness.Low, TimeSpan.FromMilliseconds(1000)));
+        var settings = new EffectSettings
+        {
+            RunDuration = TimeSpan.FromMilliseconds(100)
+        };
+
+        var sw = Stopwatch.StartNew();
+        await engine.StartAsync(effect, settings);
+
+        while (engine.IsRunning)
+        {
+            await Task.Delay(20);
+        }
+        sw.Stop();
+
+        // Should complete around 100 ms, definitely far less than 600 ms
+        Assert.True(sw.ElapsedMilliseconds >= 70, $"Ended too early: {sw.ElapsedMilliseconds} ms");
+        Assert.True(sw.ElapsedMilliseconds < 500, $"Did not end at RunDuration: {sw.ElapsedMilliseconds} ms");
+        Assert.True(backend.RestoreCallCount >= 1);
+    }
 }

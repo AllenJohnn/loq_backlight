@@ -152,7 +152,27 @@ public class LightingEngine : IAsyncDisposable
 
                 // Clamp hold to at least 50 ms
                 var hold = step.Hold < MinimumHold ? MinimumHold : step.Hold;
-                await Task.Delay(hold, ct).ConfigureAwait(false);
+                var delay = hold;
+                if (settings.RunDuration.HasValue)
+                {
+                    var remaining = settings.RunDuration.Value - stopwatch.Elapsed;
+                    if (remaining <= TimeSpan.Zero)
+                    {
+                        break;
+                    }
+
+                    if (remaining < delay)
+                    {
+                        delay = remaining;
+                    }
+                }
+
+                await Task.Delay(delay, ct).ConfigureAwait(false);
+
+                if (settings.RunDuration.HasValue && stopwatch.Elapsed >= settings.RunDuration.Value)
+                {
+                    break;
+                }
             }
         }
         catch (OperationCanceledException)
