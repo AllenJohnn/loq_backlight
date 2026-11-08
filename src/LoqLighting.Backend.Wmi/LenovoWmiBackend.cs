@@ -153,6 +153,60 @@ public class LenovoWmiBackend : ILightingBackend
         }, ct);
     }
 
+    public Task RestoreAsync(LightingState state, CancellationToken ct = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ct.ThrowIfCancellationRequested();
+
+        // If snapshot was Off (raw 1), restore via the dedicated raw write helper; otherwise use standard WriteAsync
+        if (state.RawLevel == RawOff || state.Level == Brightness.Off)
+        {
+            return ProbeWriteRawAsync(RawOff, state.StateType, ct);
+        }
+
+        return WriteAsync(state, ct);
+    }
+
+    /// <summary>
+    /// Internal method strictly used by the probe-off command to test writing candidate raw value 1.
+    /// Rejects any value other than raw 1.
+    /// </summary>
+    internal Task ProbeWriteRawAsync(byte rawLevel, byte stateType, CancellationToken ct = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ct.ThrowIfCancellationRequested();
+
+        if (rawLevel != RawOff)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(rawLevel),
+                rawLevel,
+                $"ProbeWriteRawAsync strictly allows candidate raw value {RawOff} (Off).");
+        }
+
+        return Task.Run(() =>
+        {
+            ct.ThrowIfCancellationRequested();
+
+            try
+            {
+                var instance = GetOrCreateInstance();
+
+                using var inParams = instance.GetMethodParameters(SetMethodName);
+                inParams["Lighting_ID"] = (byte)0;
+                inParams["Current_State_Type"] = stateType;
+                inParams["Current_Brightness_Level"] = rawLevel;
+
+                instance.InvokeMethod(SetMethodName, inParams, null);
+            }
+            catch (Exception ex) when (ex is not LenovoWmiException)
+            {
+                ResetInstanceOnDisconnect(ex);
+                throw TranslateException(ex, $"Probe write raw level {rawLevel} (StateType: {stateType})");
+            }
+        }, ct);
+    }
+
     private void ResetInstanceOnDisconnect(Exception ex)
     {
         lock (_syncRoot)

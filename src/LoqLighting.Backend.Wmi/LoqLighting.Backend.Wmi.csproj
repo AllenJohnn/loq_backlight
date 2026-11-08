@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <PackageReference Include="System.Management" Version="10.0.14" />
+    <InternalsVisibleTo Include="LoqLighting.Probe" />
   </ItemGroup>
 
   <PropertyGroup>

@@ -32,6 +32,7 @@
     - `read`: reads current brightness and state type with `[PASS]`.
     - `set low|high`: sets brightness, reads back, and verifies with `[PASS]`/`[FAIL]`. Blocks unverified `set off`.
     - `cycle`: captures initial snapshot, verifies Low, verifies High, and guarantees restoration in `finally` with `[PASS]`/`[FAIL]`.
+    - `probe-off`: isolated test for candidate raw 1 (Off) with confirmation prompt, 1500 ms observation delay, read-back verification, and guaranteed `RestoreAsync` in `finally` and on Ctrl+C.
   - Full error reporting catching typed backend exceptions.
 
 ### Next

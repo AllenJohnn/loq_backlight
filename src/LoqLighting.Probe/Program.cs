@@ -24,6 +24,7 @@ internal static class Program
                 "read" => await HandleReadAsync(backend),
                 "set" => await HandleSetAsync(backend, args.Length > 1 ? args[1] : null),
                 "cycle" => await HandleCycleAsync(backend),
+                "probe-off" => await HandleProbeOffAsync(backend),
                 _ => HandleUnknownCommand(command)
             };
         }
@@ -80,11 +81,13 @@ internal static class Program
         Console.ForegroundColor = ConsoleColor.Green;
         Console.Write("[PASS] ");
         Console.ResetColor();
+
         string levelDisplay = state.Level switch
         {
             Brightness.Off => state.RawLevel == 1 ? "Off" : $"Off (unknown raw: {state.RawLevel})",
             _ => state.Level.ToString()
         };
+
         Console.WriteLine($"Current brightness level: {levelDisplay} (Raw Value: {state.RawLevel}, StateType: {state.StateType})");
         return 0;
     }
@@ -105,9 +108,9 @@ internal static class Program
         if (normalized == "off")
         {
             Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine("[FAIL] 'Off' brightness level is NOT verified on this hardware.");
+            Console.WriteLine("[FAIL] 'Off' brightness level is NOT supported for writing via 'set'.");
             Console.ResetColor();
-            Console.WriteLine("Off remains disabled to prevent sending unverified codes. Supported levels: low, high.");
+            Console.WriteLine("WriteAsync strictly rejects Off for safety. Use 'probe-off' for isolated Off testing.");
             return 1;
         }
 
@@ -139,7 +142,7 @@ internal static class Program
             Console.ForegroundColor = ConsoleColor.Green;
             Console.Write("[PASS] ");
             Console.ResetColor();
-            Console.WriteLine($"Brightness verified as {verified.Level} (StateType: {verified.StateType})");
+            Console.WriteLine($"Brightness verified as {verified.Level} (Raw Value: {verified.RawLevel}, StateType: {verified.StateType})");
             return 0;
         }
         else
@@ -147,7 +150,7 @@ internal static class Program
             Console.ForegroundColor = ConsoleColor.Red;
             Console.Write("[FAIL] ");
             Console.ResetColor();
-            Console.WriteLine($"Expected {target}, but hardware reported {verified.Level}");
+            Console.WriteLine($"Expected {target}, but hardware reported {verified.Level} (Raw Value: {verified.RawLevel})");
             return 1;
         }
     }
@@ -159,7 +162,7 @@ internal static class Program
         var snapshot = await backend.ReadAsync();
 
         Console.ForegroundColor = ConsoleColor.Cyan;
-        Console.WriteLine($"[INFO] Snapshot captured: Level={snapshot.Level}, StateType={snapshot.StateType}");
+        Console.WriteLine($"[INFO] Snapshot captured: Level={snapshot.Level}, RawLevel={snapshot.RawLevel}, StateType={snapshot.StateType}");
         Console.ResetColor();
 
         bool allPassed = true;
@@ -177,7 +180,7 @@ internal static class Program
                 Console.ForegroundColor = ConsoleColor.Green;
                 Console.Write("[PASS] ");
                 Console.ResetColor();
-                Console.WriteLine($"Low level verified (Read: {readLow.Level}, StateType: {readLow.StateType})");
+                Console.WriteLine($"Low level verified (Read: {readLow.Level}, Raw Value: {readLow.RawLevel}, StateType: {readLow.StateType})");
             }
             else
             {
@@ -185,7 +188,7 @@ internal static class Program
                 Console.ForegroundColor = ConsoleColor.Red;
                 Console.Write("[FAIL] ");
                 Console.ResetColor();
-                Console.WriteLine($"Low level mismatch: expected Low, got {readLow.Level}");
+                Console.WriteLine($"Low level mismatch: expected Low, got {readLow.Level} (Raw: {readLow.RawLevel})");
             }
 
             // Step 2: Set High and verify
@@ -199,7 +202,7 @@ internal static class Program
                 Console.ForegroundColor = ConsoleColor.Green;
                 Console.Write("[PASS] ");
                 Console.ResetColor();
-                Console.WriteLine($"High level verified (Read: {readHigh.Level}, StateType: {readHigh.StateType})");
+                Console.WriteLine($"High level verified (Read: {readHigh.Level}, Raw Value: {readHigh.RawLevel}, StateType: {readHigh.StateType})");
             }
             else
             {
@@ -207,24 +210,24 @@ internal static class Program
                 Console.ForegroundColor = ConsoleColor.Red;
                 Console.Write("[FAIL] ");
                 Console.ResetColor();
-                Console.WriteLine($"High level mismatch: expected High, got {readHigh.Level}");
+                Console.WriteLine($"High level mismatch: expected High, got {readHigh.Level} (Raw: {readHigh.RawLevel})");
             }
         }
         finally
         {
             // Always restore snapshot state
-            Console.WriteLine($"[INFO] Restoring snapshot state: Level={snapshot.Level}, StateType={snapshot.StateType}...");
+            Console.WriteLine($"[INFO] Restoring snapshot state: Level={snapshot.Level}, RawLevel={snapshot.RawLevel}, StateType={snapshot.StateType}...");
             try
             {
-                await backend.WriteAsync(snapshot);
+                await backend.RestoreAsync(snapshot);
                 var restored = await backend.ReadAsync();
 
-                if (restored.Level == snapshot.Level)
+                if (restored.RawLevel == snapshot.RawLevel)
                 {
                     Console.ForegroundColor = ConsoleColor.Green;
                     Console.Write("[PASS] ");
                     Console.ResetColor();
-                    Console.WriteLine($"Restored original state successfully (Level={restored.Level})");
+                    Console.WriteLine($"Restored original state successfully (Level={restored.Level}, Raw Value: {restored.RawLevel})");
                 }
                 else
                 {
@@ -232,7 +235,7 @@ internal static class Program
                     Console.ForegroundColor = ConsoleColor.Red;
                     Console.Write("[FAIL] ");
                     Console.ResetColor();
-                    Console.WriteLine($"Failed to verify restored state: expected {snapshot.Level}, got {restored.Level}");
+                    Console.WriteLine($"Failed to verify restored state: expected raw {snapshot.RawLevel}, got raw {restored.RawLevel}");
                 }
             }
             catch (Exception ex)
@@ -262,6 +265,126 @@ internal static class Program
         }
     }
 
+    private static async Task<int> HandleProbeOffAsync(LenovoWmiBackend backend)
+    {
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine("================================================================================");
+        Console.WriteLine("WARNING: Hardware Probe - Off Value Verification");
+        Console.WriteLine("This command will write candidate raw value 1 (Off) to the keyboard lighting");
+        Console.WriteLine("controller over ACPI/WMI. While raw 1 was observed via Fn+Space, writing it");
+        Console.WriteLine("directly is experimental.");
+        Console.WriteLine("The probe will test raw 1, delay 1500 ms, verify read-back, and restore snapshot.");
+        Console.WriteLine("================================================================================");
+        Console.ResetColor();
+
+        Console.Write("Type 'yes' to proceed: ");
+        string? confirmation = Console.ReadLine()?.Trim();
+        if (!string.Equals(confirmation, "yes", StringComparison.OrdinalIgnoreCase))
+        {
+            Console.WriteLine("[INFO] Probe cancelled by user.");
+            return 0;
+        }
+
+        Console.WriteLine("[INFO] Capturing snapshot via ReadAsync before probe...");
+        var snapshot = await backend.ReadAsync();
+
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine($"[INFO] Initial snapshot: Level={snapshot.Level}, RawLevel={snapshot.RawLevel}, StateType={snapshot.StateType}");
+        Console.ResetColor();
+
+        int restoreDone = 0;
+        Func<Task> restoreAction = async () =>
+        {
+            if (Interlocked.Exchange(ref restoreDone, 1) == 0)
+            {
+                Console.WriteLine($"[INFO] Restoring snapshot state: Level={snapshot.Level}, RawLevel={snapshot.RawLevel}, StateType={snapshot.StateType}...");
+                try
+                {
+                    await backend.RestoreAsync(snapshot, CancellationToken.None);
+                    var restored = await backend.ReadAsync(CancellationToken.None);
+
+                    if (restored.RawLevel == snapshot.RawLevel)
+                    {
+                        Console.ForegroundColor = ConsoleColor.Green;
+                        Console.Write("[PASS] ");
+                        Console.ResetColor();
+                        Console.WriteLine($"Successfully restored original state (Level={restored.Level}, RawLevel={restored.RawLevel})");
+                    }
+                    else
+                    {
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.Write("[FAIL] ");
+                        Console.ResetColor();
+                        Console.WriteLine($"Failed to verify restored state: expected raw {snapshot.RawLevel}, got raw {restored.RawLevel}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.Write("[FAIL] ");
+                    Console.ResetColor();
+                    Console.WriteLine($"Exception while restoring original state: {ex.Message}");
+                }
+            }
+        };
+
+        ConsoleCancelEventHandler cancelHandler = (sender, e) =>
+        {
+            e.Cancel = true;
+            Console.WriteLine();
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine("[INFO] Ctrl+C interrupt detected. Restoring snapshot before exit...");
+            Console.ResetColor();
+            try
+            {
+                restoreAction().GetAwaiter().GetResult();
+            }
+            catch
+            {
+                // Ignore secondary errors on exit
+            }
+            Environment.Exit(130);
+        };
+
+        Console.CancelKeyPress += cancelHandler;
+
+        bool passed = false;
+        try
+        {
+            Console.WriteLine("[TEST] Writing candidate raw value 1 (Off)...");
+            await backend.ProbeWriteRawAsync(1, snapshot.StateType);
+
+            Console.WriteLine("[INFO] Delaying 1500 ms to observe hardware state...");
+            await Task.Delay(1500);
+
+            Console.WriteLine("[TEST] Reading back backlight status...");
+            var readBack = await backend.ReadAsync();
+
+            if (readBack.RawLevel == 1)
+            {
+                passed = true;
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.Write("[PASS] ");
+                Console.ResetColor();
+                Console.WriteLine($"Hardware confirmed raw value 1 (Level: {readBack.Level}, RawLevel: {readBack.RawLevel}, StateType: {readBack.StateType})");
+            }
+            else
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.Write("[FAIL] ");
+                Console.ResetColor();
+                Console.WriteLine($"Hardware did not confirm raw value 1 (Read: Level={readBack.Level}, RawLevel={readBack.RawLevel}, StateType={readBack.StateType})");
+            }
+        }
+        finally
+        {
+            Console.CancelKeyPress -= cancelHandler;
+            await restoreAction();
+        }
+
+        return passed ? 0 : 1;
+    }
+
     private static int HandleUnknownCommand(string command)
     {
         Console.ForegroundColor = ConsoleColor.Red;
@@ -278,5 +401,6 @@ internal static class Program
         Console.WriteLine("  LoqLighting.Probe read           - Read current backlight brightness and state type");
         Console.WriteLine("  LoqLighting.Probe set low|high   - Set backlight brightness to low or high");
         Console.WriteLine("  LoqLighting.Probe cycle          - Snapshot state, test Low, test High, restore original");
+        Console.WriteLine("  LoqLighting.Probe probe-off      - Experimental probe of candidate raw value 1 (Off)");
     }
 }
