@@ -49,7 +49,18 @@ Get-WmiObject -Namespace "root\WMI" -Class "LENOVO_LIGHTING_METHOD"
 Get-WmiObject : Access denied  (ManagementException)
 ```
 
-**Conclusion: a standard-user process cannot open this class. Administrator rights are required** (elevated run still to be confirmed).
+**Conclusion: a standard-user process cannot open this class. Administrator rights are required.**
+
+Elevated Windows PowerShell, same session type, 2026-11-08:
+
+| Step | Result |
+|---|---|
+| Get (initial) | `Current_Brightness_Level = 3`, `Current_State_Type = 0` |
+| Set `(0, 0, 2)` | accepted |
+| Get (after 2 s) | `Current_Brightness_Level = 2`, `Current_State_Type = 0` |
+| Set `(0, 0, 3)` | issued; read-back not captured in this run |
+
+**Confirmed: elevated Get and Set work, and levels read back correctly.**
 
 ## Hardware limits
 
