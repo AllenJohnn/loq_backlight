@@ -31,6 +31,31 @@ public partial class MainViewModel : ObservableObject, IAsyncDisposable
     [ObservableProperty]
     private string _statusMessage = "Ready";
 
+    // Live Status Panel
+    [ObservableProperty]
+    private string _engineStateText = "Stopped";
+
+    [ObservableProperty]
+    private string _activeEffectName = "None";
+
+    [ObservableProperty]
+    private string _elapsedTimeText = "00:00";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasLastError))]
+    private string? _lastErrorMessage;
+
+    public bool HasLastError => !string.IsNullOrEmpty(LastErrorMessage);
+
+    [ObservableProperty]
+    private bool _hasFaultError;
+
+    [ObservableProperty]
+    private string? _faultErrorMessage;
+
+    private System.Windows.Threading.DispatcherTimer? _elapsedTimer;
+    private DateTime _runStartTime;
+
     // Controls
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SpeedDisplayText))]
@@ -87,9 +112,23 @@ public partial class MainViewModel : ObservableObject, IAsyncDisposable
     {
         System.Windows.Application.Current?.Dispatcher.Invoke(() =>
         {
+            _elapsedTimer?.Stop();
+            _elapsedTimer = null;
             IsRunning = false;
-            StatusMessage = $"Engine Faulted: {ex.Message}";
+            EngineStateText = "Faulted";
+            ActiveEffectName = "None";
+            LastErrorMessage = ex.Message;
+            FaultErrorMessage = $"Lighting engine encountered a hardware or communication fault: {ex.Message}";
+            HasFaultError = true;
+            StatusMessage = "Faulted";
         });
+    }
+
+    [RelayCommand]
+    public void DismissFaultBanner()
+    {
+        HasFaultError = false;
+        FaultErrorMessage = null;
     }
 
     [RelayCommand]
@@ -107,6 +146,7 @@ public partial class MainViewModel : ObservableObject, IAsyncDisposable
             CurrentLevelText = "Unknown / Error";
             HardwareDetailsText = $"Error reading status: {ex.Message}";
             IsBackendConnected = false;
+            LastErrorMessage = ex.Message;
         }
     }
 
@@ -129,10 +169,32 @@ public partial class MainViewModel : ObservableObject, IAsyncDisposable
 
             await _engine.StartAsync(SelectedEffect.Effect, settings);
             IsRunning = true;
+            EngineStateText = "Running";
+            ActiveEffectName = SelectedEffect.Name;
+            HasFaultError = false;
+
+            _runStartTime = DateTime.UtcNow;
+            ElapsedTimeText = "00:00";
+            _elapsedTimer?.Stop();
+            _elapsedTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(250)
+            };
+            _elapsedTimer.Tick += (s, e) =>
+            {
+                if (IsRunning)
+                {
+                    var elapsed = DateTime.UtcNow - _runStartTime;
+                    ElapsedTimeText = $"{elapsed:mm\\:ss}";
+                }
+            };
+            _elapsedTimer.Start();
         }
         catch (Exception ex)
         {
             StatusMessage = $"Start Failed: {ex.Message}";
+            LastErrorMessage = ex.Message;
+            EngineStateText = "Faulted";
             IsRunning = false;
         }
     }
@@ -143,14 +205,19 @@ public partial class MainViewModel : ObservableObject, IAsyncDisposable
         try
         {
             StatusMessage = "Stopping...";
+            _elapsedTimer?.Stop();
+            _elapsedTimer = null;
             await _engine.StopAsync();
             IsRunning = false;
+            EngineStateText = "Stopped";
+            ActiveEffectName = "None";
             StatusMessage = "Stopped";
             await RefreshCurrentStateAsync();
         }
         catch (Exception ex)
         {
             StatusMessage = $"Stop Failed: {ex.Message}";
+            LastErrorMessage = ex.Message;
         }
     }
 

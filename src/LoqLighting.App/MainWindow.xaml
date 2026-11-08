@@ -5,8 +5,8 @@
                  xmlns:vm="clr-namespace:LoqLighting.App.ViewModels"
                  xmlns:models="clr-namespace:LoqLighting.App.Models"
                  Title="LOQ Lighting Studio"
-                 Height="720" Width="920"
-                 MinHeight="600" MinWidth="800"
+                 Height="740" Width="940"
+                 MinHeight="620" MinWidth="820"
                  WindowStartupLocation="CenterScreen">
     <ui:FluentWindow.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
@@ -16,6 +16,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
@@ -23,7 +24,7 @@
         <ui:TitleBar Title="LOQ Lighting Studio" Grid.Row="0" Margin="-24,-24,-24,12" />
 
         <!-- Current Status Header -->
-        <ui:Card Grid.Row="1" Margin="0,0,0,16" Padding="16">
+        <ui:Card Grid.Row="1" Margin="0,0,0,14" Padding="16">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -48,8 +49,30 @@
             </Grid>
         </ui:Card>
 
+        <!-- Fault Error Banner -->
+        <Border Grid.Row="2" Background="#26E81123" BorderBrush="#88E81123" BorderThickness="1" CornerRadius="8" Margin="0,0,0,14" Padding="14"
+                Visibility="{Binding HasFaultError, Converter={StaticResource BoolToVis}}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <ui:SymbolIcon Symbol="DismissCircle24" FontSize="22" Foreground="#FFE81123" Margin="0,0,12,0" VerticalAlignment="Center" />
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <ui:TextBlock Text="Hardware / Engine Fault" FontTypography="BodyStrong" Foreground="#FFE81123" />
+                    <ui:TextBlock Text="{Binding FaultErrorMessage}" Appearance="Secondary" Margin="0,2,0,0" TextWrapping="Wrap" />
+                </StackPanel>
+                <ui:Button Grid.Column="2"
+                           Icon="{ui:SymbolIcon Dismiss16}"
+                           Command="{Binding DismissFaultBannerCommand}"
+                           Appearance="Transparent"
+                           VerticalAlignment="Center" />
+            </Grid>
+        </Border>
+
         <!-- Main Body: Effects List (Left) + Effect Controls (Right) -->
-        <Grid Grid.Row="2" Margin="0,0,0,16">
+        <Grid Grid.Row="3" Margin="0,0,0,14">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="1.1*" />
                 <ColumnDefinition Width="16" />
@@ -180,19 +203,72 @@
             </ui:Card>
         </Grid>
 
-        <!-- Action / Controls Bar -->
-        <ui:Card Grid.Row="3" Padding="16">
+        <!-- Live Status Panel & Action Bar -->
+        <ui:Card Grid.Row="4" Padding="16">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <StackPanel VerticalAlignment="Center">
-                    <ui:TextBlock Text="{Binding StatusMessage}" FontTypography="BodyStrong" />
+                <!-- Live Status Metrics -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- Engine State Badge -->
+                    <Border CornerRadius="4" Padding="10,5" Margin="0,0,18,0">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="{ui:ThemeResource ControlFillColorSecondaryBrush}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding EngineStateText}" Value="Running">
+                                        <Setter Property="Background" Value="#2233AA33" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding EngineStateText}" Value="Faulted">
+                                        <Setter Property="Background" Value="#33FF3333" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <ui:SymbolIcon Symbol="Circle24" FontSize="10" Margin="0,0,6,0">
+                                <ui:SymbolIcon.Style>
+                                    <Style TargetType="ui:SymbolIcon">
+                                        <Setter Property="Foreground" Value="{ui:ThemeResource TextFillColorSecondaryBrush}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding EngineStateText}" Value="Running">
+                                                <Setter Property="Foreground" Value="#55FF55" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding EngineStateText}" Value="Faulted">
+                                                <Setter Property="Foreground" Value="#FF5555" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ui:SymbolIcon.Style>
+                            </ui:SymbolIcon>
+                            <ui:TextBlock Text="{Binding EngineStateText}" FontTypography="BodyStrong" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Active Effect -->
+                    <StackPanel Margin="0,0,18,0" VerticalAlignment="Center">
+                        <ui:TextBlock Text="Current Effect" FontTypography="Caption" Appearance="Tertiary" />
+                        <ui:TextBlock Text="{Binding ActiveEffectName}" FontTypography="BodyStrong" />
+                    </StackPanel>
+
+                    <!-- Elapsed Time -->
+                    <StackPanel Margin="0,0,18,0" VerticalAlignment="Center">
+                        <ui:TextBlock Text="Elapsed Time" FontTypography="Caption" Appearance="Tertiary" />
+                        <ui:TextBlock Text="{Binding ElapsedTimeText}" FontTypography="BodyStrong" />
+                    </StackPanel>
+
+                    <!-- Last Error -->
+                    <StackPanel VerticalAlignment="Center" MaxWidth="280" Visibility="{Binding HasLastError, Converter={StaticResource BoolToVis}}">
+                        <ui:TextBlock Text="Last Error" FontTypography="Caption" Foreground="{ui:ThemeResource SystemFillColorCriticalBrush}" />
+                        <ui:TextBlock Text="{Binding LastErrorMessage}" FontTypography="Caption" Appearance="Secondary" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
                 </StackPanel>
 
-                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <!-- Start/Stop Action Button -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                     <ui:Button Appearance="Primary"
                                Padding="20,10"
                                Command="{Binding TogglePlaybackCommand}">
