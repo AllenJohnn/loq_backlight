@@ -9,7 +9,7 @@
 
 - Non-elevated WMI test result: `Access denied`. Admin rights required.
 
-### Next
+- Elevated WMI test: Get/Set work, level 2 read back correctly.
 
-- Run the same WMI test from an elevated PowerShell and record the result.
+### Next
 - Phase 2: .NET solution skeleton and `LoqLighting.Probe`.
