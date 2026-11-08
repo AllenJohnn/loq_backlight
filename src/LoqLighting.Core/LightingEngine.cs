@@ -40,7 +40,18 @@ public class LightingEngine : IAsyncDisposable
             var runCts = _cts;
 
             // Capture initial snapshot before starting animation
-            var snapshot = await _backend.ReadAsync(runCts.Token).ConfigureAwait(false);
+            LightingState snapshot;
+            try
+            {
+                snapshot = await _backend.ReadAsync(runCts.Token).ConfigureAwait(false);
+            }
+            catch
+            {
+                runCts.Cancel();
+                runCts.Dispose();
+                _cts = null;
+                throw;
+            }
 
             _loopTask = Task.Run(() => RunLoopAsync(effect, settings, snapshot, runCts.Token));
         }

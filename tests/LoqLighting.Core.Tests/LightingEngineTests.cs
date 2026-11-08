@@ -207,4 +207,33 @@ public class LightingEngineTests
         Assert.True(sw.ElapsedMilliseconds < 500, $"Did not end at RunDuration: {sw.ElapsedMilliseconds} ms");
         Assert.True(backend.RestoreCallCount >= 1);
     }
+
+    [Fact]
+    public async Task StartAsync_InitialReadThrows_DisposesCtsAndSetsNull()
+    {
+        var expectedEx = new InvalidOperationException("Initial read failed");
+        var backend = new FakeBackend
+        {
+            ThrowOnRead = true,
+            ReadException = expectedEx
+        };
+
+        await using var engine = new LightingEngine(backend);
+        var effect = new SimpleEffect(new Step(Brightness.Low, TimeSpan.FromMilliseconds(50)));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => engine.StartAsync(effect));
+        Assert.Same(expectedEx, ex);
+
+        // Engine should not be running
+        Assert.False(engine.IsRunning);
+
+        // Subsequent StopAsync should succeed without throwing ObjectDisposedException
+        await engine.StopAsync();
+
+        // Engine can successfully start when read recovers
+        backend.ThrowOnRead = false;
+        await engine.StartAsync(effect);
+        Assert.True(engine.IsRunning);
+        await engine.StopAsync();
+    }
 }

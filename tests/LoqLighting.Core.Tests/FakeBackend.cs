@@ -20,6 +20,9 @@ public class FakeBackend : ILightingBackend
     public int WriteCallCount { get; private set; }
     public int RestoreCallCount { get; private set; }
 
+    public bool ThrowOnRead { get; set; }
+    public Exception? ReadException { get; set; }
+
     public bool ThrowOnWrite { get; set; }
     public Exception? WriteException { get; set; }
 
@@ -28,6 +31,10 @@ public class FakeBackend : ILightingBackend
 
     public Task<LightingState> ReadAsync(CancellationToken ct = default)
     {
+        if (ThrowOnRead)
+        {
+            throw ReadException ?? new InvalidOperationException("FakeBackend read failure");
+        }
         return Task.FromResult(CurrentState);
     }
 
