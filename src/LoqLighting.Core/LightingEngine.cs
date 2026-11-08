@@ -175,9 +175,19 @@ public class LightingEngine : IAsyncDisposable
                 }
 
                 var targetDeadline = nextDeadline;
-                if (settings.RunDuration.HasValue && settings.RunDuration.Value < targetDeadline)
+                bool isFinalDelay = false;
+                if (settings.RunDuration.HasValue)
                 {
-                    targetDeadline = settings.RunDuration.Value;
+                    if (stopwatch.Elapsed >= settings.RunDuration.Value)
+                    {
+                        break;
+                    }
+
+                    if (settings.RunDuration.Value <= targetDeadline)
+                    {
+                        targetDeadline = settings.RunDuration.Value;
+                        isFinalDelay = true;
+                    }
                 }
 
                 var delay = targetDeadline - stopwatch.Elapsed;
@@ -186,7 +196,7 @@ public class LightingEngine : IAsyncDisposable
                     await Task.Delay(delay, ct).ConfigureAwait(false);
                 }
 
-                if (settings.RunDuration.HasValue && stopwatch.Elapsed >= settings.RunDuration.Value)
+                if (isFinalDelay || (settings.RunDuration.HasValue && stopwatch.Elapsed >= settings.RunDuration.Value))
                 {
                     break;
                 }

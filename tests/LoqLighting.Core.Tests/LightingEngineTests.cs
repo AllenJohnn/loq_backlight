@@ -283,32 +283,35 @@ public class LightingEngineTests
         await using var engine = new LightingEngine(backend);
         var strobe = new StrobeEffect();
 
-        // 200 ms tier for 1000 ms
+        // 200 ms tier for 1000 ms -> ~5 steps/sec
         var settings200 = new EffectSettings { Speed = 0.5, RunDuration = TimeSpan.FromMilliseconds(1000) };
         await engine.StartAsync(strobe, settings200);
         while (engine.IsRunning) await Task.Delay(20);
+        await engine.StopAsync();
         int calls200 = backend.WrittenStates.Count;
 
         backend.WrittenStates.Clear();
 
-        // 100 ms tier for 1000 ms
+        // 100 ms tier for 1000 ms -> ~10 steps/sec
         var settings100 = new EffectSettings { Speed = 1.0, RunDuration = TimeSpan.FromMilliseconds(1000) };
         await engine.StartAsync(strobe, settings100);
         while (engine.IsRunning) await Task.Delay(20);
+        await engine.StopAsync();
         int calls100 = backend.WrittenStates.Count;
 
         backend.WrittenStates.Clear();
 
-        // 50 ms tier for 1000 ms
+        // 50 ms tier for 1000 ms -> ~20 steps/sec
         var settings50 = new EffectSettings { Speed = 2.0, RunDuration = TimeSpan.FromMilliseconds(1000) };
         await engine.StartAsync(strobe, settings50);
         while (engine.IsRunning) await Task.Delay(20);
+        await engine.StopAsync();
         int calls50 = backend.WrittenStates.Count;
 
         // Verify call counts per second match expected rates without drift:
-        // 200 ms: ~5 calls/sec (150 calls in 30s)
-        // 100 ms: ~10 calls/sec (300 calls in 30s)
-        // 50 ms: ~20 calls/sec (600 calls in 30s)
+        // 200 ms: ~4-5 writes/sec (150 in 30s)
+        // 100 ms: ~9-10 writes/sec (300 in 30s)
+        // 50 ms: ~19-20 writes/sec (600 in 30s)
         Assert.InRange(calls200, 4, 6);
         Assert.InRange(calls100, 9, 11);
         Assert.InRange(calls50, 19, 21);
