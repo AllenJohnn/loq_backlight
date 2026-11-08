@@ -40,6 +40,17 @@ Positional order follows the parameter IDs: `(Lighting_ID, Current_State_Type, C
 - Whether administrator rights are required.
 - Behaviour after sleep/resume and when Lenovo Vantage / Fn key also change the state.
 
+## Privilege test (2026-11-08)
+
+Non-elevated Windows PowerShell:
+
+```text
+Get-WmiObject -Namespace "root\WMI" -Class "LENOVO_LIGHTING_METHOD"
+Get-WmiObject : Access denied  (ManagementException)
+```
+
+**Conclusion: a standard-user process cannot open this class. Administrator rights are required** (elevated run still to be confirmed).
+
 ## Hardware limits
 
 - Three brightness states only. No RGB, no continuous dimming.
