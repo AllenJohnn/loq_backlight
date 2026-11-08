@@ -1,4 +1,5 @@
-﻿using LoqLighting.Backend.Wmi;
+﻿using System.Diagnostics;
+using LoqLighting.Backend.Wmi;
 using LoqLighting.Core;
 using LoqLighting.Core.Effects;
 
@@ -27,6 +28,7 @@ internal static class Program
                 "cycle" => await HandleCycleAsync(backend),
                 "probe-off" => await HandleProbeOffAsync(backend),
                 "play" => await HandlePlayAsync(backend, args),
+                "bench" => await HandleBenchAsync(backend, args),
                 _ => HandleUnknownCommand(command)
             };
         }
@@ -495,6 +497,279 @@ internal static class Program
         return 0;
     }
 
+    private static async Task<int> HandleBenchAsync(ILightingBackend backend, string[] args)
+    {
+        int durationSeconds = 30;
+        for (int i = 1; i < args.Length; i++)
+        {
+            if ((args[i].Equals("--seconds", StringComparison.OrdinalIgnoreCase) ||
+                 args[i].Equals("-s", StringComparison.OrdinalIgnoreCase)) && i + 1 < args.Length)
+            {
+                if (int.TryParse(args[++i], out int parsedSec) && parsedSec > 0)
+                {
+                    durationSeconds = parsedSec;
+                }
+            }
+        }
+
+        Console.WriteLine("============================================================");
+        Console.WriteLine("LoqLighting Hardware Benchmark (Strobe: 200ms, 100ms, 50ms)");
+        Console.WriteLine("============================================================");
+        Console.WriteLine($"Duration per tier: {durationSeconds} seconds");
+        Console.WriteLine("Interruption: Press Ctrl+C at any time to abort and restore original brightness.\n");
+
+        Console.WriteLine("[INFO] Reading initial keyboard backlight state...");
+        var initialSnapshot = await backend.ReadAsync();
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.Write("[PASS] ");
+        Console.ResetColor();
+        Console.WriteLine($"Initial state captured: Level={initialSnapshot.Level} (Raw Value: {initialSnapshot.RawLevel}, StateType: {initialSnapshot.StateType})\n");
+
+        var decorator = new BenchmarkingBackendDecorator(backend);
+        await using var engine = new LightingEngine(decorator);
+
+        engine.Faulted += (s, ex) =>
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"\n[FAULT] Lighting engine faulted during benchmark: {ex.Message}");
+            Console.ResetColor();
+        };
+
+        using var stopCts = new CancellationTokenSource();
+        ConsoleCancelEventHandler cancelHandler = (s, e) =>
+        {
+            e.Cancel = true;
+            Console.WriteLine();
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine("[INFO] Ctrl+C interrupt detected. Cancelling benchmark...");
+            Console.ResetColor();
+            stopCts.Cancel();
+        };
+
+        Console.CancelKeyPress += cancelHandler;
+
+        int[] intervalsMs = [200, 100, 50];
+        var results = new List<BenchTierResult>();
+        var strobe = new StrobeEffect();
+
+        try
+        {
+            foreach (int intervalMs in intervalsMs)
+            {
+                if (stopCts.IsCancellationRequested)
+                {
+                    break;
+                }
+
+                double speed = 100.0 / intervalMs;
+                var settings = new EffectSettings
+                {
+                    Speed = speed,
+                    RunDuration = TimeSpan.FromSeconds(durationSeconds)
+                };
+
+                Console.WriteLine($"[INFO] Starting Tier: {intervalMs} ms step interval (Speed={speed:F2}x, Target Duration={durationSeconds}s)...");
+
+                decorator.ResetMetrics();
+                var process = Process.GetCurrentProcess();
+                var cpuStart = process.TotalProcessorTime;
+                var wallSw = Stopwatch.StartNew();
+
+                decorator.IsRecording = true;
+                await engine.StartAsync(strobe, settings, stopCts.Token);
+
+                while (engine.IsRunning && !stopCts.IsCancellationRequested)
+                {
+                    try
+                    {
+                        await Task.Delay(100, stopCts.Token);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
+                }
+
+                await engine.StopAsync();
+                decorator.IsRecording = false;
+                wallSw.Stop();
+
+                var cpuEnd = process.TotalProcessorTime;
+                double cpuUsedMs = (cpuEnd - cpuStart).TotalMilliseconds;
+                double wallTimeMs = wallSw.Elapsed.TotalMilliseconds;
+                double totalCpuPercent = wallTimeMs > 0 ? (cpuUsedMs / (wallTimeMs * Environment.ProcessorCount)) * 100.0 : 0.0;
+                double singleCoreCpuPercent = wallTimeMs > 0 ? (cpuUsedMs / wallTimeMs) * 100.0 : 0.0;
+
+                var durations = decorator.CallDurationsMs;
+                int calls = durations.Count;
+                int errors = decorator.ErrorCount;
+                double avgCallMs = calls > 0 ? durations.Average() : 0.0;
+                double maxCallMs = calls > 0 ? durations.Max() : 0.0;
+                double minCallMs = calls > 0 ? durations.Min() : 0.0;
+
+                var tierResult = new BenchTierResult(
+                    intervalMs,
+                    calls,
+                    avgCallMs,
+                    maxCallMs,
+                    minCallMs,
+                    errors,
+                    totalCpuPercent,
+                    singleCoreCpuPercent);
+
+                results.Add(tierResult);
+
+                Console.WriteLine($"------------------------------------------------------------");
+                Console.WriteLine($"Tier Results: {intervalMs} ms step interval ({durationSeconds} s)");
+                Console.WriteLine($"------------------------------------------------------------");
+                Console.WriteLine($"  WMI Calls Completed : {calls}");
+                Console.WriteLine($"  Average Call Time   : {avgCallMs:F2} ms");
+                Console.WriteLine($"  Max Call Time       : {maxCallMs:F2} ms");
+                Console.WriteLine($"  Min Call Time       : {minCallMs:F2} ms");
+                Console.WriteLine($"  Error Count         : {errors}");
+                Console.WriteLine($"  Process CPU Usage   : {totalCpuPercent:F2}% (Total system across {Environment.ProcessorCount} cores)");
+                Console.WriteLine($"                        {singleCoreCpuPercent:F2}% (Single core equivalent)");
+                Console.WriteLine($"------------------------------------------------------------\n");
+
+                if (!stopCts.IsCancellationRequested && intervalMs != intervalsMs[^1])
+                {
+                    Console.WriteLine("[INFO] Resting for 1 second before next tier...\n");
+                    try
+                    {
+                        await Task.Delay(1000, stopCts.Token);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
+                }
+            }
+
+            if (results.Count > 0)
+            {
+                Console.WriteLine("========================================================================================================");
+                Console.WriteLine("Benchmark Summary");
+                Console.WriteLine("========================================================================================================");
+                Console.WriteLine($"{"Step Hold",9} | {"Calls",7} | {"Avg WMI Time",12} | {"Max WMI Time",12} | {"Errors",6} | {"CPU (Total)",11} | {"CPU (1-Core)",12}");
+                Console.WriteLine("--------------------------------------------------------------------------------------------------------");
+                foreach (var r in results)
+                {
+                    Console.WriteLine($"{r.IntervalMs,7} ms | {r.Calls,7} | {r.AvgCallTimeMs,9:F2} ms | {r.MaxCallTimeMs,9:F2} ms | {r.ErrorCount,6} | {r.TotalCpuPercent,10:F2}% | {r.SingleCoreCpuPercent,11:F2}%");
+                }
+                Console.WriteLine("========================================================================================================\n");
+            }
+        }
+        finally
+        {
+            Console.CancelKeyPress -= cancelHandler;
+            Console.WriteLine("[INFO] Restoring original backlight state...");
+            try
+            {
+                await backend.RestoreAsync(initialSnapshot, CancellationToken.None);
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.Write("[PASS] ");
+                Console.ResetColor();
+                Console.WriteLine($"Original brightness restored: Level={initialSnapshot.Level} (Raw Value: {initialSnapshot.RawLevel}, StateType: {initialSnapshot.StateType})");
+            }
+            catch (Exception ex)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.Write("[FAIL] ");
+                Console.ResetColor();
+                Console.WriteLine($"Failed to restore original backlight state: {ex.Message}");
+            }
+        }
+
+        return stopCts.IsCancellationRequested ? 1 : 0;
+    }
+
+    private readonly record struct BenchTierResult(
+        int IntervalMs,
+        int Calls,
+        double AvgCallTimeMs,
+        double MaxCallTimeMs,
+        double MinCallTimeMs,
+        int ErrorCount,
+        double TotalCpuPercent,
+        double SingleCoreCpuPercent);
+
+    private sealed class BenchmarkingBackendDecorator : ILightingBackend
+    {
+        private readonly ILightingBackend _inner;
+        private readonly List<double> _callDurationsMs = new();
+        private readonly object _lock = new();
+
+        public bool IsRecording { get; set; }
+        public int ErrorCount { get; private set; }
+
+        public IReadOnlyList<double> CallDurationsMs
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    return _callDurationsMs.ToArray();
+                }
+            }
+        }
+
+        public BenchmarkingBackendDecorator(ILightingBackend inner)
+        {
+            _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+        }
+
+        public IReadOnlySet<Brightness> SupportedLevels => _inner.SupportedLevels;
+
+        public Task<LightingState> ReadAsync(CancellationToken ct = default) => _inner.ReadAsync(ct);
+
+        public async Task WriteAsync(LightingState state, CancellationToken ct = default)
+        {
+            var sw = Stopwatch.StartNew();
+            try
+            {
+                await _inner.WriteAsync(state, ct).ConfigureAwait(false);
+            }
+            catch
+            {
+                if (IsRecording)
+                {
+                    lock (_lock)
+                    {
+                        ErrorCount++;
+                    }
+                }
+                throw;
+            }
+            finally
+            {
+                sw.Stop();
+                if (IsRecording)
+                {
+                    lock (_lock)
+                    {
+                        _callDurationsMs.Add(sw.Elapsed.TotalMilliseconds);
+                    }
+                }
+            }
+        }
+
+        public Task RestoreAsync(LightingState state, CancellationToken ct = default)
+        {
+            return _inner.RestoreAsync(state, ct);
+        }
+
+        public void ResetMetrics()
+        {
+            lock (_lock)
+            {
+                _callDurationsMs.Clear();
+                ErrorCount = 0;
+            }
+        }
+
+        public ValueTask DisposeAsync() => _inner.DisposeAsync();
+    }
+
     private static int HandleUnknownCommand(string command)
     {
         Console.ForegroundColor = ConsoleColor.Red;
@@ -513,5 +788,6 @@ internal static class Program
         Console.WriteLine("  LoqLighting.Probe cycle          - Snapshot state, test Low, test High, restore original");
         Console.WriteLine("  LoqLighting.Probe probe-off      - Experimental probe of candidate raw value 1 (Off)");
         Console.WriteLine("  LoqLighting.Probe play <effect>  - Play an effect [--speed 1.0] [--seconds 10]");
+        Console.WriteLine("  LoqLighting.Probe bench          - Benchmark Strobe at 200/100/50 ms for 30s each [--seconds 30]");
     }
 }
