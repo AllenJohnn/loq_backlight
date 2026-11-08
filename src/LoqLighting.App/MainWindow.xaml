@@ -1,0 +1,38 @@
+﻿<ui:FluentWindow x:Class="LoqLighting.App.MainWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 xmlns:vm="clr-namespace:LoqLighting.App.ViewModels"
+                 Title="LOQ Lighting Studio"
+                 Height="600" Width="800"
+                 WindowStartupLocation="CenterScreen">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Title="LOQ Lighting Studio" Grid.Row="0" />
+
+        <StackPanel Grid.Row="1" Margin="0,20,0,0" VerticalAlignment="Top">
+            <ui:TextBlock Text="Current Backlight Level"
+                          FontTypography="Subtitle"
+                          Margin="0,0,0,8" />
+            <ui:Card Margin="0,0,0,16">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <ui:SymbolIcon Symbol="Lightbulb24" FontSize="28" Margin="0,0,16,0" />
+                    <StackPanel>
+                        <ui:TextBlock Text="{Binding CurrentLevelText}"
+                                      FontTypography="Title" />
+                        <ui:TextBlock Text="{Binding HardwareDetailsText}"
+                                      Appearance="Secondary" />
+                    </StackPanel>
+                </StackPanel>
+            </ui:Card>
+
+            <ui:Button Content="Refresh State"
+                       Icon="{ui:SymbolIcon ArrowClockwise24}"
+                       Command="{Binding RefreshCurrentStateCommand}" />
+        </StackPanel>
+    </Grid>
+</ui:FluentWindow>
