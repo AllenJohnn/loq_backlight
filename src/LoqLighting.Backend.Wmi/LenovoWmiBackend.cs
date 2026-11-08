@@ -23,8 +23,13 @@ public class LenovoWmiBackend : ILightingBackend
     };
 
     private readonly object _syncRoot = new();
+    private readonly SemaphoreSlim _wmiGate = new(1, 1);
     private ManagementObject? _lightingInstance;
     private bool _disposed;
+
+    internal SemaphoreSlim WmiGate => _wmiGate;
+    internal Func<LightingState>? WmiReader { get; set; }
+    internal Action<byte, byte>? WmiWriter { get; set; }
 
     public IReadOnlySet<Brightness> SupportedLevels => AllowedLevels;
 
@@ -64,50 +69,63 @@ public class LenovoWmiBackend : ILightingBackend
         }
     }
 
-    public Task<LightingState> ReadAsync(CancellationToken ct = default)
+    public async Task<LightingState> ReadAsync(CancellationToken ct = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ct.ThrowIfCancellationRequested();
 
-        return Task.Run(() =>
+        await _wmiGate.WaitAsync(ct).ConfigureAwait(false);
+        try
         {
-            ct.ThrowIfCancellationRequested();
-
-            try
+            return await Task.Run(() =>
             {
-                var instance = GetOrCreateInstance();
+                ct.ThrowIfCancellationRequested();
 
-                using var inParams = instance.GetMethodParameters(GetMethodName);
-                inParams["Lighting_ID"] = (byte)0;
-
-                using var outParams = instance.InvokeMethod(GetMethodName, inParams, null);
-                if (outParams == null)
+                if (WmiReader != null)
                 {
-                    throw new LenovoWmiOperationException($"WMI method '{GetMethodName}' returned a null result.");
+                    return WmiReader();
                 }
 
-                byte rawLevel = Convert.ToByte(outParams["Current_Brightness_Level"]);
-                byte stateType = Convert.ToByte(outParams["Current_State_Type"]);
-
-                Brightness level = rawLevel switch
+                try
                 {
-                    RawOff => Brightness.Off,
-                    RawLow => Brightness.Low,
-                    RawHigh => Brightness.High,
-                    _ => Brightness.Off // Raw values other than 1, 2, 3 return Off-unknown with real RawLevel
-                };
+                    var instance = GetOrCreateInstance();
 
-                return new LightingState(level, stateType, rawLevel);
-            }
-            catch (Exception ex) when (ex is not LenovoWmiException)
-            {
-                ResetInstanceOnDisconnect(ex);
-                throw TranslateException(ex, "Read backlight state");
-            }
-        }, ct);
+                    using var inParams = instance.GetMethodParameters(GetMethodName);
+                    inParams["Lighting_ID"] = (byte)0;
+
+                    using var outParams = instance.InvokeMethod(GetMethodName, inParams, null);
+                    if (outParams == null)
+                    {
+                        throw new LenovoWmiOperationException($"WMI method '{GetMethodName}' returned a null result.");
+                    }
+
+                    byte rawLevel = Convert.ToByte(outParams["Current_Brightness_Level"]);
+                    byte stateType = Convert.ToByte(outParams["Current_State_Type"]);
+
+                    Brightness level = rawLevel switch
+                    {
+                        RawOff => Brightness.Off,
+                        RawLow => Brightness.Low,
+                        RawHigh => Brightness.High,
+                        _ => Brightness.Off // Raw values other than 1, 2, 3 return Off-unknown with real RawLevel
+                    };
+
+                    return new LightingState(level, stateType, rawLevel);
+                }
+                catch (Exception ex) when (ex is not LenovoWmiException)
+                {
+                    ResetInstanceOnDisconnect(ex);
+                    throw TranslateException(ex, "Read backlight state");
+                }
+            }, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            _wmiGate.Release();
+        }
     }
 
-    public Task WriteAsync(LightingState state, CancellationToken ct = default)
+    public async Task WriteAsync(LightingState state, CancellationToken ct = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ct.ThrowIfCancellationRequested();
@@ -131,33 +149,56 @@ public class LenovoWmiBackend : ILightingBackend
                 $"Unexpected brightness level '{state.Level}'.")
         };
 
-        return Task.Run(() =>
+        await _wmiGate.WaitAsync(ct).ConfigureAwait(false);
+        try
         {
-            ct.ThrowIfCancellationRequested();
-
-            try
+            await Task.Run(() =>
             {
-                var instance = GetOrCreateInstance();
+                ct.ThrowIfCancellationRequested();
 
-                using var inParams = instance.GetMethodParameters(SetMethodName);
-                inParams["Lighting_ID"] = (byte)0;
-                inParams["Current_State_Type"] = state.StateType;
-                inParams["Current_Brightness_Level"] = rawLevel;
+                if (WmiWriter != null)
+                {
+                    WmiWriter(rawLevel, state.StateType);
+                    return;
+                }
 
-                instance.InvokeMethod(SetMethodName, inParams, null);
-            }
-            catch (Exception ex) when (ex is not LenovoWmiException)
-            {
-                ResetInstanceOnDisconnect(ex);
-                throw TranslateException(ex, $"Write backlight state (Level: {state.Level}, StateType: {state.StateType})");
-            }
-        }, ct);
+                try
+                {
+                    var instance = GetOrCreateInstance();
+
+                    using var inParams = instance.GetMethodParameters(SetMethodName);
+                    inParams["Lighting_ID"] = (byte)0;
+                    inParams["Current_State_Type"] = state.StateType;
+                    inParams["Current_Brightness_Level"] = rawLevel;
+
+                    instance.InvokeMethod(SetMethodName, inParams, null);
+                }
+                catch (Exception ex) when (ex is not LenovoWmiException)
+                {
+                    ResetInstanceOnDisconnect(ex);
+                    throw TranslateException(ex, $"Write backlight state (Level: {state.Level}, StateType: {state.StateType})");
+                }
+            }, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            _wmiGate.Release();
+        }
     }
 
     public Task RestoreAsync(LightingState state, CancellationToken ct = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ct.ThrowIfCancellationRequested();
+
+        if (state.RawLevel is not (RawOff or RawLow or RawHigh))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(state),
+                state.RawLevel,
+                $"Cannot restore backlight state with unverified raw level {state.RawLevel}. Only levels {RawOff} (Off), {RawLow} (Low), and {RawHigh} (High) are supported for hardware write.");
+        }
+
         return WriteAsync(state, ct);
     }
 
@@ -165,7 +206,7 @@ public class LenovoWmiBackend : ILightingBackend
     /// Internal method strictly used by the probe-off command to test writing candidate raw value 1.
     /// Rejects any value other than raw 1.
     /// </summary>
-    internal Task ProbeWriteRawAsync(byte rawLevel, byte stateType, CancellationToken ct = default)
+    internal async Task ProbeWriteRawAsync(byte rawLevel, byte stateType, CancellationToken ct = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ct.ThrowIfCancellationRequested();
@@ -178,27 +219,41 @@ public class LenovoWmiBackend : ILightingBackend
                 $"ProbeWriteRawAsync strictly allows candidate raw value {RawOff} (Off).");
         }
 
-        return Task.Run(() =>
+        await _wmiGate.WaitAsync(ct).ConfigureAwait(false);
+        try
         {
-            ct.ThrowIfCancellationRequested();
-
-            try
+            await Task.Run(() =>
             {
-                var instance = GetOrCreateInstance();
+                ct.ThrowIfCancellationRequested();
 
-                using var inParams = instance.GetMethodParameters(SetMethodName);
-                inParams["Lighting_ID"] = (byte)0;
-                inParams["Current_State_Type"] = stateType;
-                inParams["Current_Brightness_Level"] = rawLevel;
+                if (WmiWriter != null)
+                {
+                    WmiWriter(rawLevel, stateType);
+                    return;
+                }
 
-                instance.InvokeMethod(SetMethodName, inParams, null);
-            }
-            catch (Exception ex) when (ex is not LenovoWmiException)
-            {
-                ResetInstanceOnDisconnect(ex);
-                throw TranslateException(ex, $"Probe write raw level {rawLevel} (StateType: {stateType})");
-            }
-        }, ct);
+                try
+                {
+                    var instance = GetOrCreateInstance();
+
+                    using var inParams = instance.GetMethodParameters(SetMethodName);
+                    inParams["Lighting_ID"] = (byte)0;
+                    inParams["Current_State_Type"] = stateType;
+                    inParams["Current_Brightness_Level"] = rawLevel;
+
+                    instance.InvokeMethod(SetMethodName, inParams, null);
+                }
+                catch (Exception ex) when (ex is not LenovoWmiException)
+                {
+                    ResetInstanceOnDisconnect(ex);
+                    throw TranslateException(ex, $"Probe write raw level {rawLevel} (StateType: {stateType})");
+                }
+            }, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            _wmiGate.Release();
+        }
     }
 
     private void ResetInstanceOnDisconnect(Exception ex)
@@ -277,6 +332,7 @@ public class LenovoWmiBackend : ILightingBackend
             {
                 _lightingInstance?.Dispose();
                 _lightingInstance = null;
+                _wmiGate.Dispose();
                 _disposed = true;
             }
         }
