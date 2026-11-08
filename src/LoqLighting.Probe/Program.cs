@@ -80,7 +80,12 @@ internal static class Program
         Console.ForegroundColor = ConsoleColor.Green;
         Console.Write("[PASS] ");
         Console.ResetColor();
-        Console.WriteLine($"Current brightness level: {state.Level} (Raw Value: {(byte)state.Level + 1}, StateType: {state.StateType})");
+        string levelDisplay = state.Level switch
+        {
+            Brightness.Off => state.RawLevel == 1 ? "Off" : $"Off (unknown raw: {state.RawLevel})",
+            _ => state.Level.ToString()
+        };
+        Console.WriteLine($"Current brightness level: {levelDisplay} (Raw Value: {state.RawLevel}, StateType: {state.StateType})");
         return 0;
     }
 

@@ -11,6 +11,7 @@ public class LenovoWmiBackend : ILightingBackend
     private const string GetMethodName = "Get_Lighting_Current_Status";
     private const string SetMethodName = "Set_Lighting_Current_Status";
 
+    private const byte RawOff = 1;
     private const byte RawLow = 2;
     private const byte RawHigh = 3;
 
@@ -89,14 +90,13 @@ public class LenovoWmiBackend : ILightingBackend
 
                 Brightness level = rawLevel switch
                 {
+                    RawOff => Brightness.Off,
                     RawLow => Brightness.Low,
                     RawHigh => Brightness.High,
-                    _ => throw new LenovoWmiOperationException(
-                        $"Hardware reported unverified brightness level {rawLevel}. " +
-                        "Only levels 2 (Low) and 3 (High) are supported.")
+                    _ => Brightness.Off // Raw values other than 1, 2, 3 return Off-unknown with real RawLevel
                 };
 
-                return new LightingState(level, stateType);
+                return new LightingState(level, stateType, rawLevel);
             }
             catch (Exception ex) when (ex is not LenovoWmiException)
             {
@@ -116,8 +116,8 @@ public class LenovoWmiBackend : ILightingBackend
             throw new ArgumentOutOfRangeException(
                 nameof(state),
                 state.Level,
-                $"Brightness level '{state.Level}' is not verified or supported. " +
-                "Only Low (2) and High (3) are supported. Off remains disabled for safety.");
+                $"Brightness level '{state.Level}' is not verified or supported for writing. " +
+                "Only Low (2) and High (3) are supported for WriteAsync. Off remains disabled for WriteAsync safety.");
         }
 
         byte rawLevel = state.Level switch
