@@ -112,9 +112,12 @@ public class LightingEngine : IAsyncDisposable
         LightingState snapshot,
         CancellationToken ct)
     {
+        using var timerScope = TimerResolution.Request(1);
+
         Brightness? lastLevel = snapshot.Level;
         Exception? faultException = null;
         var stopwatch = Stopwatch.StartNew();
+        var nextDeadline = TimeSpan.Zero;
 
         try
         {
@@ -126,6 +129,10 @@ public class LightingEngine : IAsyncDisposable
                 {
                     break;
                 }
+
+                // Clamp hold to at least 50 ms
+                var hold = step.Hold < MinimumHold ? MinimumHold : step.Hold;
+                nextDeadline += hold;
 
                 // Skip redundant writes
                 if (lastLevel != step.Level)
@@ -161,24 +168,23 @@ public class LightingEngine : IAsyncDisposable
                     }
                 }
 
-                // Clamp hold to at least 50 ms
-                var hold = step.Hold < MinimumHold ? MinimumHold : step.Hold;
-                var delay = hold;
-                if (settings.RunDuration.HasValue)
+                // Prevent deadline from lagging behind real time if a stall occurred
+                if (nextDeadline < stopwatch.Elapsed)
                 {
-                    var remaining = settings.RunDuration.Value - stopwatch.Elapsed;
-                    if (remaining <= TimeSpan.Zero)
-                    {
-                        break;
-                    }
-
-                    if (remaining < delay)
-                    {
-                        delay = remaining;
-                    }
+                    nextDeadline = stopwatch.Elapsed;
                 }
 
-                await Task.Delay(delay, ct).ConfigureAwait(false);
+                var targetDeadline = nextDeadline;
+                if (settings.RunDuration.HasValue && settings.RunDuration.Value < targetDeadline)
+                {
+                    targetDeadline = settings.RunDuration.Value;
+                }
+
+                var delay = targetDeadline - stopwatch.Elapsed;
+                if (delay > TimeSpan.Zero)
+                {
+                    await Task.Delay(delay, ct).ConfigureAwait(false);
+                }
 
                 if (settings.RunDuration.HasValue && stopwatch.Elapsed >= settings.RunDuration.Value)
                 {

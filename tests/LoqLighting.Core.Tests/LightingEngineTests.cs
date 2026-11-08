@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using LoqLighting.Core;
+using LoqLighting.Core.Effects;
 using Xunit;
 
 namespace LoqLighting.Core.Tests;
@@ -235,5 +236,81 @@ public class LightingEngineTests
         await engine.StartAsync(effect);
         Assert.True(engine.IsRunning);
         await engine.StopAsync();
+    }
+
+    [Fact]
+    public void TimerResolution_RequestsAndDisposesWithoutException()
+    {
+        using (var scope = TimerResolution.Request(1))
+        {
+            Assert.NotNull(scope);
+        }
+    }
+
+    [Fact]
+    public async Task TimelineScheduling_DoesNotDrift()
+    {
+        var backend = new FakeBackend { CurrentState = new LightingState(Brightness.High, 0, 3) };
+        await using var engine = new LightingEngine(backend);
+
+        // 6 steps of 50 ms each = 300 ms timeline
+        var steps = new List<Step>();
+        for (int i = 0; i < 6; i++)
+        {
+            steps.Add(new Step(i % 2 == 0 ? Brightness.Low : Brightness.High, TimeSpan.FromMilliseconds(50)));
+        }
+
+        var effect = new SimpleEffect(steps);
+        var sw = Stopwatch.StartNew();
+        await engine.StartAsync(effect);
+
+        while (engine.IsRunning)
+        {
+            await Task.Delay(20);
+        }
+        sw.Stop();
+
+        // With absolute scheduling, 6 x 50 ms steps should finish very close to 300 ms, well under 450 ms
+        Assert.True(sw.ElapsedMilliseconds >= 250, $"Elapsed too short: {sw.ElapsedMilliseconds} ms");
+        Assert.True(sw.ElapsedMilliseconds < 450, $"Drifted too much: {sw.ElapsedMilliseconds} ms");
+        Assert.True(backend.RestoreCallCount >= 1);
+    }
+
+    [Fact]
+    public async Task BenchmarkTiers_ExecuteExpectedCallRatesWithoutDrift()
+    {
+        var backend = new FakeBackend { CurrentState = new LightingState(Brightness.High, 0, 3) };
+        await using var engine = new LightingEngine(backend);
+        var strobe = new StrobeEffect();
+
+        // 200 ms tier for 1000 ms
+        var settings200 = new EffectSettings { Speed = 0.5, RunDuration = TimeSpan.FromMilliseconds(1000) };
+        await engine.StartAsync(strobe, settings200);
+        while (engine.IsRunning) await Task.Delay(20);
+        int calls200 = backend.WrittenStates.Count;
+
+        backend.WrittenStates.Clear();
+
+        // 100 ms tier for 1000 ms
+        var settings100 = new EffectSettings { Speed = 1.0, RunDuration = TimeSpan.FromMilliseconds(1000) };
+        await engine.StartAsync(strobe, settings100);
+        while (engine.IsRunning) await Task.Delay(20);
+        int calls100 = backend.WrittenStates.Count;
+
+        backend.WrittenStates.Clear();
+
+        // 50 ms tier for 1000 ms
+        var settings50 = new EffectSettings { Speed = 2.0, RunDuration = TimeSpan.FromMilliseconds(1000) };
+        await engine.StartAsync(strobe, settings50);
+        while (engine.IsRunning) await Task.Delay(20);
+        int calls50 = backend.WrittenStates.Count;
+
+        // Verify call counts per second match expected rates without drift:
+        // 200 ms: ~5 calls/sec (150 calls in 30s)
+        // 100 ms: ~10 calls/sec (300 calls in 30s)
+        // 50 ms: ~20 calls/sec (600 calls in 30s)
+        Assert.InRange(calls200, 4, 6);
+        Assert.InRange(calls100, 9, 11);
+        Assert.InRange(calls50, 19, 21);
     }
 }
