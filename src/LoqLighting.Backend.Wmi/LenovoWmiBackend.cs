@@ -17,6 +17,7 @@ public class LenovoWmiBackend : ILightingBackend
 
     private static readonly HashSet<Brightness> AllowedLevels = new()
     {
+        Brightness.Off,
         Brightness.Low,
         Brightness.High
     };
@@ -116,12 +117,12 @@ public class LenovoWmiBackend : ILightingBackend
             throw new ArgumentOutOfRangeException(
                 nameof(state),
                 state.Level,
-                $"Brightness level '{state.Level}' is not verified or supported for writing. " +
-                "Only Low (2) and High (3) are supported for WriteAsync. Off remains disabled for WriteAsync safety.");
+                $"Brightness level '{state.Level}' is not supported. Supported levels are Off, Low, and High.");
         }
 
         byte rawLevel = state.Level switch
         {
+            Brightness.Off => RawOff,
             Brightness.Low => RawLow,
             Brightness.High => RawHigh,
             _ => throw new ArgumentOutOfRangeException(
@@ -157,13 +158,6 @@ public class LenovoWmiBackend : ILightingBackend
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ct.ThrowIfCancellationRequested();
-
-        // If snapshot was Off (raw 1), restore via the dedicated raw write helper; otherwise use standard WriteAsync
-        if (state.RawLevel == RawOff || state.Level == Brightness.Off)
-        {
-            return ProbeWriteRawAsync(RawOff, state.StateType, ct);
-        }
-
         return WriteAsync(state, ct);
     }
 

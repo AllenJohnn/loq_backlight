@@ -105,18 +105,12 @@ internal static class Program
 
         string normalized = levelArg.ToLowerInvariant();
 
-        if (normalized == "off")
-        {
-            Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine("[FAIL] 'Off' brightness level is NOT supported for writing via 'set'.");
-            Console.ResetColor();
-            Console.WriteLine("WriteAsync strictly rejects Off for safety. Use 'probe-off' for isolated Off testing.");
-            return 1;
-        }
-
         Brightness target;
         switch (normalized)
         {
+            case "off":
+                target = Brightness.Off;
+                break;
             case "low":
                 target = Brightness.Low;
                 break;
@@ -125,7 +119,7 @@ internal static class Program
                 break;
             default:
                 Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine($"[FAIL] Unknown brightness level '{levelArg}'. Supported levels: low, high.");
+                Console.WriteLine($"[FAIL] Unknown brightness level '{levelArg}'. Supported levels: off, low, high.");
                 Console.ResetColor();
                 return 1;
         }
