@@ -150,6 +150,19 @@
 
                         <Separator Margin="0,4,0,14" />
 
+                        <!-- Startup & Automation Options -->
+                        <StackPanel Margin="0,0,0,14">
+                            <ui:TextBlock Text="Startup &amp; Automation" FontTypography="Subtitle" Margin="0,0,0,10" />
+                            <CheckBox Content="Start with Windows (Task Scheduler, Admin)"
+                                      IsChecked="{Binding StartWithWindows, Mode=TwoWay}"
+                                      Margin="0,0,0,8" />
+                            <CheckBox Content="Auto-start last profile on launch"
+                                      IsChecked="{Binding AutoStartLastProfile, Mode=TwoWay}"
+                                      Margin="0,0,0,4" />
+                        </StackPanel>
+
+                        <Separator Margin="0,4,0,14" />
+
                         <ui:TextBlock Text="Effect Controls" FontTypography="Subtitle" Margin="0,0,0,16" />
 
                         <!-- Speed Slider -->

@@ -8,6 +8,7 @@ public class ProfileService
 {
     private readonly string _profilesDirectory;
     private readonly string _lastUsedPath;
+    private readonly string _settingsPath;
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     public ProfileService()
@@ -16,6 +17,7 @@ public class ProfileService
         string baseDir = Path.Combine(appData, "LoqLightingStudio");
         _profilesDirectory = Path.Combine(baseDir, "profiles");
         _lastUsedPath = Path.Combine(baseDir, "last_used.txt");
+        _settingsPath = Path.Combine(baseDir, "settings.json");
 
         Directory.CreateDirectory(_profilesDirectory);
     }
@@ -110,5 +112,37 @@ public class ProfileService
         }
 
         return null;
+    }
+
+    public AppSettings LoadSettings()
+    {
+        try
+        {
+            if (File.Exists(_settingsPath))
+            {
+                string json = File.ReadAllText(_settingsPath);
+                return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+            }
+        }
+        catch
+        {
+            // Ignore
+        }
+
+        return new AppSettings();
+    }
+
+    public void SaveSettings(AppSettings settings)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath)!);
+            string json = JsonSerializer.Serialize(settings, JsonOptions);
+            File.WriteAllText(_settingsPath, json);
+        }
+        catch
+        {
+            // Ignore
+        }
     }
 }

@@ -18,7 +18,23 @@ public partial class MainWindow : FluentWindow
         _viewModel = new MainViewModel();
         DataContext = _viewModel;
 
-        Loaded += async (s, e) => await _viewModel.RefreshCurrentStateAsync();
+        Loaded += async (s, e) =>
+        {
+            await _viewModel.RefreshCurrentStateAsync();
+
+            bool isAutoStart = Environment.GetCommandLineArgs().Any(a => a.Equals("--autostart", StringComparison.OrdinalIgnoreCase));
+            bool isMinimized = Environment.GetCommandLineArgs().Any(a => a.Equals("--minimized", StringComparison.OrdinalIgnoreCase));
+
+            if (isAutoStart || _viewModel.AutoStartLastProfile)
+            {
+                await _viewModel.StartEffectAsync();
+            }
+
+            if (isAutoStart || isMinimized)
+            {
+                Hide();
+            }
+        };
 
         // Setup System Tray Icon
         _notifyIcon = new System.Windows.Forms.NotifyIcon

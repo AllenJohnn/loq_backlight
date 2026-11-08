@@ -14,6 +14,7 @@ public partial class MainViewModel : ObservableObject, IAsyncDisposable
     private readonly ILightingBackend _backend;
     private readonly LightingEngine _engine;
     private readonly ProfileService _profileService;
+    private readonly TaskSchedulerService _taskSchedulerService;
 
     [ObservableProperty]
     private string _currentLevelText = "Reading...";
@@ -32,6 +33,13 @@ public partial class MainViewModel : ObservableObject, IAsyncDisposable
 
     [ObservableProperty]
     private string _statusMessage = "Ready";
+
+    // System Startup & Automation Options
+    [ObservableProperty]
+    private bool _startWithWindows;
+
+    [ObservableProperty]
+    private bool _autoStartLastProfile;
 
     // Profiles
     public ObservableCollection<LightingProfile> Profiles { get; } = new();
@@ -99,11 +107,15 @@ public partial class MainViewModel : ObservableObject, IAsyncDisposable
 
     private bool _wasRunningBeforeSuspend;
 
-    public MainViewModel(ILightingBackend? backend = null, ProfileService? profileService = null)
+    public MainViewModel(
+        ILightingBackend? backend = null,
+        ProfileService? profileService = null,
+        TaskSchedulerService? taskSchedulerService = null)
     {
         _backend = backend ?? new LenovoWmiBackend();
         _engine = new LightingEngine(_backend);
         _profileService = profileService ?? new ProfileService();
+        _taskSchedulerService = taskSchedulerService ?? new TaskSchedulerService();
 
         _engine.Faulted += OnEngineFaulted;
         Microsoft.Win32.SystemEvents.PowerModeChanged += OnPowerModeChanged;
@@ -118,6 +130,40 @@ public partial class MainViewModel : ObservableObject, IAsyncDisposable
         SelectedEffect = AvailableEffects[0];
 
         LoadProfiles();
+        LoadAppSettings();
+    }
+
+    private bool _isLoadingSettings;
+
+    private void LoadAppSettings()
+    {
+        _isLoadingSettings = true;
+        try
+        {
+            var settings = _profileService.LoadSettings();
+            AutoStartLastProfile = settings.AutoStartLastProfile;
+            StartWithWindows = _taskSchedulerService.IsTaskScheduled();
+        }
+        finally
+        {
+            _isLoadingSettings = false;
+        }
+    }
+
+    partial void OnStartWithWindowsChanged(bool value)
+    {
+        if (_isLoadingSettings) return;
+        _taskSchedulerService.SetStartWithWindows(value, AutoStartLastProfile);
+    }
+
+    partial void OnAutoStartLastProfileChanged(bool value)
+    {
+        if (_isLoadingSettings) return;
+        _profileService.SaveSettings(new AppSettings { AutoStartLastProfile = value });
+        if (StartWithWindows)
+        {
+            _taskSchedulerService.SetStartWithWindows(true, value);
+        }
     }
 
     public void LoadProfiles()
