@@ -1,0 +1,41 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{F531315A-66C5-4297-98AB-9BFA7D8DDD6F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LoqLighting.Core", "src\LoqLighting.Core\LoqLighting.Core.csproj", "{4F83411B-21DB-4953-B9F4-BD9D6B504A6F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LoqLighting.Backend.Wmi", "src\LoqLighting.Backend.Wmi\LoqLighting.Backend.Wmi.csproj", "{9150279E-EA3A-4C73-8F93-36CAA5B11E56}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LoqLighting.Probe", "src\LoqLighting.Probe\LoqLighting.Probe.csproj", "{5B8C45C1-DA79-4159-845C-CE7A02BA7CAF}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4F83411B-21DB-4953-B9F4-BD9D6B504A6F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4F83411B-21DB-4953-B9F4-BD9D6B504A6F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4F83411B-21DB-4953-B9F4-BD9D6B504A6F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4F83411B-21DB-4953-B9F4-BD9D6B504A6F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9150279E-EA3A-4C73-8F93-36CAA5B11E56}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9150279E-EA3A-4C73-8F93-36CAA5B11E56}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9150279E-EA3A-4C73-8F93-36CAA5B11E56}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9150279E-EA3A-4C73-8F93-36CAA5B11E56}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5B8C45C1-DA79-4159-845C-CE7A02BA7CAF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5B8C45C1-DA79-4159-845C-CE7A02BA7CAF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5B8C45C1-DA79-4159-845C-CE7A02BA7CAF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5B8C45C1-DA79-4159-845C-CE7A02BA7CAF}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{4F83411B-21DB-4953-B9F4-BD9D6B504A6F} = {F531315A-66C5-4297-98AB-9BFA7D8DDD6F}
+		{9150279E-EA3A-4C73-8F93-36CAA5B11E56} = {F531315A-66C5-4297-98AB-9BFA7D8DDD6F}
+		{5B8C45C1-DA79-4159-845C-CE7A02BA7CAF} = {F531315A-66C5-4297-98AB-9BFA7D8DDD6F}
+	EndGlobalSection
+EndGlobal
