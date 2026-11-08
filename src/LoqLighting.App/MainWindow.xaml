@@ -3,36 +3,107 @@
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                  xmlns:vm="clr-namespace:LoqLighting.App.ViewModels"
+                 xmlns:models="clr-namespace:LoqLighting.App.Models"
                  Title="LOQ Lighting Studio"
-                 Height="600" Width="800"
+                 Height="650" Width="850"
+                 MinHeight="550" MinWidth="750"
                  WindowStartupLocation="CenterScreen">
-    <Grid Margin="20">
+    <Grid Margin="24">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <ui:TitleBar Title="LOQ Lighting Studio" Grid.Row="0" />
+        <ui:TitleBar Title="LOQ Lighting Studio" Grid.Row="0" Margin="-24,-24,-24,12" />
 
-        <StackPanel Grid.Row="1" Margin="0,20,0,0" VerticalAlignment="Top">
-            <ui:TextBlock Text="Current Backlight Level"
-                          FontTypography="Subtitle"
-                          Margin="0,0,0,8" />
-            <ui:Card Margin="0,0,0,16">
+        <!-- Current Status Header -->
+        <ui:Card Grid.Row="1" Margin="0,0,0,16" Padding="16">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <ui:SymbolIcon Symbol="Lightbulb24" FontSize="28" Margin="0,0,16,0" />
+                    <ui:SymbolIcon Symbol="Lightbulb24" FontSize="28" Margin="0,0,16,0" Foreground="{ui:ThemeResource AccentTextFillColorPrimaryBrush}" />
                     <StackPanel>
-                        <ui:TextBlock Text="{Binding CurrentLevelText}"
-                                      FontTypography="Title" />
-                        <ui:TextBlock Text="{Binding HardwareDetailsText}"
-                                      Appearance="Secondary" />
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <ui:TextBlock Text="Current Backlight: " FontTypography="Body" Appearance="Secondary" />
+                            <ui:TextBlock Text="{Binding CurrentLevelText}" FontTypography="BodyStrong" />
+                        </StackPanel>
+                        <ui:TextBlock Text="{Binding HardwareDetailsText}" FontTypography="Caption" Appearance="Tertiary" Margin="0,2,0,0" />
                     </StackPanel>
                 </StackPanel>
-            </ui:Card>
 
-            <ui:Button Content="Refresh State"
-                       Icon="{ui:SymbolIcon ArrowClockwise24}"
-                       Command="{Binding RefreshCurrentStateCommand}" />
-        </StackPanel>
+                <ui:Button Grid.Column="1"
+                           Content="Refresh"
+                           Icon="{ui:SymbolIcon ArrowClockwise20}"
+                           Command="{Binding RefreshCurrentStateCommand}"
+                           VerticalAlignment="Center" />
+            </Grid>
+        </ui:Card>
+
+        <!-- Effects List -->
+        <Grid Grid.Row="2" Margin="0,0,0,16">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <ui:TextBlock Text="Stepped Backlight Effects (3-Level Hardware)"
+                          FontTypography="Subtitle"
+                          Margin="0,0,0,10" />
+
+            <ListView Grid.Row="1"
+                      ItemsSource="{Binding AvailableEffects}"
+                      SelectedItem="{Binding SelectedEffect, Mode=TwoWay}"
+                      SelectionMode="Single">
+                <ListView.ItemTemplate>
+                    <DataTemplate DataType="{x:Type models:EffectItem}">
+                        <Border Padding="12,10" Margin="0,2">
+                            <StackPanel>
+                                <ui:TextBlock Text="{Binding Name}" FontTypography="BodyStrong" />
+                                <ui:TextBlock Text="{Binding Description}" Appearance="Secondary" Margin="0,3,0,0" />
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+        </Grid>
+
+        <!-- Action / Controls Bar -->
+        <ui:Card Grid.Row="3" Padding="16">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel VerticalAlignment="Center">
+                    <ui:TextBlock Text="{Binding StatusMessage}" FontTypography="BodyStrong" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <ui:Button Appearance="Primary"
+                               Padding="20,10"
+                               Command="{Binding TogglePlaybackCommand}">
+                        <ui:Button.Style>
+                            <Style TargetType="ui:Button" BasedOn="{StaticResource {x:Type ui:Button}}">
+                                <Setter Property="Content" Value="Start Effect" />
+                                <Setter Property="Icon" Value="{ui:SymbolIcon Play24}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsRunning}" Value="True">
+                                        <Setter Property="Content" Value="Stop Effect" />
+                                        <Setter Property="Icon" Value="{ui:SymbolIcon Stop24}" />
+                                        <Setter Property="Appearance" Value="Danger" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ui:Button.Style>
+                    </ui:Button>
+                </StackPanel>
+            </Grid>
+        </ui:Card>
     </Grid>
 </ui:FluentWindow>
