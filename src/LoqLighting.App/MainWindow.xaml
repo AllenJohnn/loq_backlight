@@ -5,9 +5,13 @@
                  xmlns:vm="clr-namespace:LoqLighting.App.ViewModels"
                  xmlns:models="clr-namespace:LoqLighting.App.Models"
                  Title="LOQ Lighting Studio"
-                 Height="650" Width="850"
-                 MinHeight="550" MinWidth="750"
+                 Height="720" Width="920"
+                 MinHeight="600" MinWidth="800"
                  WindowStartupLocation="CenterScreen">
+    <ui:FluentWindow.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+    </ui:FluentWindow.Resources>
+
     <Grid Margin="24">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -44,32 +48,136 @@
             </Grid>
         </ui:Card>
 
-        <!-- Effects List -->
+        <!-- Main Body: Effects List (Left) + Effect Controls (Right) -->
         <Grid Grid.Row="2" Margin="0,0,0,16">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1.1*" />
+                <ColumnDefinition Width="16" />
+                <ColumnDefinition Width="1*" />
+            </Grid.ColumnDefinitions>
 
-            <ui:TextBlock Text="Stepped Backlight Effects (3-Level Hardware)"
-                          FontTypography="Subtitle"
-                          Margin="0,0,0,10" />
+            <!-- Effects Column -->
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
 
-            <ListView Grid.Row="1"
-                      ItemsSource="{Binding AvailableEffects}"
-                      SelectedItem="{Binding SelectedEffect, Mode=TwoWay}"
-                      SelectionMode="Single">
-                <ListView.ItemTemplate>
-                    <DataTemplate DataType="{x:Type models:EffectItem}">
-                        <Border Padding="12,10" Margin="0,2">
-                            <StackPanel>
-                                <ui:TextBlock Text="{Binding Name}" FontTypography="BodyStrong" />
-                                <ui:TextBlock Text="{Binding Description}" Appearance="Secondary" Margin="0,3,0,0" />
+                <ui:TextBlock Text="Stepped Effects (3-Level Hardware)"
+                              FontTypography="Subtitle"
+                              Margin="0,0,0,10" />
+
+                <ListView Grid.Row="1"
+                          ItemsSource="{Binding AvailableEffects}"
+                          SelectedItem="{Binding SelectedEffect, Mode=TwoWay}"
+                          SelectionMode="Single">
+                    <ListView.ItemTemplate>
+                        <DataTemplate DataType="{x:Type models:EffectItem}">
+                            <Border Padding="12,10" Margin="0,2">
+                                <StackPanel>
+                                    <ui:TextBlock Text="{Binding Name}" FontTypography="BodyStrong" />
+                                    <ui:TextBlock Text="{Binding Description}" Appearance="Secondary" Margin="0,3,0,0" />
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </Grid>
+
+            <!-- Controls Column -->
+            <ui:Card Grid.Column="2" Padding="18">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <ui:TextBlock Text="Effect Controls" FontTypography="Subtitle" Margin="0,0,0,16" />
+
+                        <!-- Speed Slider -->
+                        <Grid Margin="0,0,0,14">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <Grid Grid.Row="0" Margin="0,0,0,6">
+                                <ui:TextBlock Text="Playback Speed" FontTypography="BodyStrong" />
+                                <ui:TextBlock Text="{Binding SpeedDisplayText}" HorizontalAlignment="Right" Appearance="Secondary" />
+                            </Grid>
+                            <Slider Grid.Row="1"
+                                    Minimum="0.25"
+                                    Maximum="4.0"
+                                    SmallChange="0.25"
+                                    LargeChange="0.5"
+                                    TickFrequency="0.25"
+                                    IsSnapToTickEnabled="True"
+                                    Value="{Binding Speed, Mode=TwoWay}" />
+                        </Grid>
+
+                        <Separator Margin="0,4,0,14" />
+
+                        <!-- Run Duration -->
+                        <StackPanel Margin="0,0,0,14">
+                            <ui:TextBlock Text="Run Duration" FontTypography="BodyStrong" Margin="0,0,0,6" />
+                            <CheckBox Content="Infinite (runs until stopped)"
+                                      IsChecked="{Binding IsInfiniteDuration, Mode=TwoWay}"
+                                      Margin="0,0,0,8" />
+                            <StackPanel Visibility="{Binding IsTimedDuration, Converter={StaticResource BoolToVis}}">
+                                <Grid Margin="0,0,0,6">
+                                    <ui:TextBlock Text="Duration (seconds)" Appearance="Secondary" />
+                                    <ui:TextBlock Text="{Binding RunDurationSeconds, StringFormat='{}{0} s'}" HorizontalAlignment="Right" Appearance="Secondary" />
+                                </Grid>
+                                <Slider Minimum="2"
+                                        Maximum="120"
+                                        SmallChange="1"
+                                        LargeChange="5"
+                                        TickFrequency="5"
+                                        IsSnapToTickEnabled="True"
+                                        Value="{Binding RunDurationSeconds, Mode=TwoWay}" />
                             </StackPanel>
-                        </Border>
-                    </DataTemplate>
-                </ListView.ItemTemplate>
-            </ListView>
+                        </StackPanel>
+
+                        <Separator Margin="0,4,0,14" />
+
+                        <!-- Pause Duration (For Strobe with Pause) -->
+                        <StackPanel Margin="0,0,0,14" IsEnabled="{Binding IsPauseDurationApplicable}">
+                            <Grid Margin="0,0,0,6">
+                                <ui:TextBlock Text="Pause Duration" FontTypography="BodyStrong" />
+                                <ui:TextBlock Text="{Binding PauseDurationMs, StringFormat='{}{0} ms'}" HorizontalAlignment="Right" Appearance="Secondary" />
+                            </Grid>
+                            <Slider Minimum="100"
+                                    Maximum="2000"
+                                    SmallChange="50"
+                                    LargeChange="100"
+                                    TickFrequency="100"
+                                    IsSnapToTickEnabled="True"
+                                    Value="{Binding PauseDurationMs, Mode=TwoWay}" />
+                            <ui:TextBlock Text="(Used by Strobe with pause)" Appearance="Tertiary" FontTypography="Caption" Margin="0,4,0,0" />
+                        </StackPanel>
+
+                        <Separator Margin="0,4,0,14" />
+
+                        <!-- High and Low Level Pickers -->
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0">
+                                <ui:TextBlock Text="High Level" FontTypography="BodyStrong" Margin="0,0,0,6" />
+                                <ComboBox ItemsSource="{Binding SupportedBrightnessLevels}"
+                                          SelectedItem="{Binding SelectedHighLevel, Mode=TwoWay}"
+                                          HorizontalAlignment="Stretch" />
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="2">
+                                <ui:TextBlock Text="Low Level" FontTypography="BodyStrong" Margin="0,0,0,6" />
+                                <ComboBox ItemsSource="{Binding SupportedBrightnessLevels}"
+                                          SelectedItem="{Binding SelectedLowLevel, Mode=TwoWay}"
+                                          HorizontalAlignment="Stretch" />
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </ScrollViewer>
+            </ui:Card>
         </Grid>
 
         <!-- Action / Controls Bar -->

@@ -31,6 +31,34 @@ public partial class MainViewModel : ObservableObject, IAsyncDisposable
     [ObservableProperty]
     private string _statusMessage = "Ready";
 
+    // Controls
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SpeedDisplayText))]
+    private double _speed = 1.0;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsTimedDuration))]
+    private bool _isInfiniteDuration = true;
+
+    [ObservableProperty]
+    private int _runDurationSeconds = 10;
+
+    [ObservableProperty]
+    private int _pauseDurationMs = 500;
+
+    [ObservableProperty]
+    private Brightness _selectedHighLevel = Brightness.High;
+
+    [ObservableProperty]
+    private Brightness _selectedLowLevel = Brightness.Low;
+
+    public string SpeedDisplayText => $"{Speed:F2}x";
+    public bool IsTimedDuration => !IsInfiniteDuration;
+    public bool IsPauseDurationApplicable => SelectedEffect?.Name.Contains("pause", StringComparison.OrdinalIgnoreCase) == true;
+
+    public IReadOnlyList<Brightness> SupportedBrightnessLevels { get; } =
+        [Brightness.Off, Brightness.Low, Brightness.High];
+
     public ObservableCollection<EffectItem> AvailableEffects { get; } = new();
 
     public MainViewModel(ILightingBackend? backend = null)
@@ -48,6 +76,11 @@ public partial class MainViewModel : ObservableObject, IAsyncDisposable
         AvailableEffects.Add(new EffectItem("Random flash", "Stepped pseudo-random flashes using hardware brightness levels.", new RandomFlashEffect()));
 
         SelectedEffect = AvailableEffects[0];
+    }
+
+    partial void OnSelectedEffectChanged(EffectItem? value)
+    {
+        OnPropertyChanged(nameof(IsPauseDurationApplicable));
     }
 
     private void OnEngineFaulted(object? sender, Exception ex)
@@ -85,7 +118,15 @@ public partial class MainViewModel : ObservableObject, IAsyncDisposable
         try
         {
             StatusMessage = $"Running '{SelectedEffect.Name}'";
-            var settings = new EffectSettings();
+            var settings = new EffectSettings
+            {
+                Speed = Speed,
+                HighLevel = SelectedHighLevel,
+                LowLevel = SelectedLowLevel,
+                PauseDuration = TimeSpan.FromMilliseconds(PauseDurationMs),
+                RunDuration = IsInfiniteDuration ? null : TimeSpan.FromSeconds(RunDurationSeconds)
+            };
+
             await _engine.StartAsync(SelectedEffect.Effect, settings);
             IsRunning = true;
         }
