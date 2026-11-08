@@ -1,0 +1,26 @@
+## .NET / Visual Studio
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.userprefs
+TestResults/
+*.log
+
+## Publish / packaging output
+publish/
+artifacts/
+*.msix
+*.nupkg
+
+## Editors
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+
+## OS
+Thumbs.db
+Desktop.ini
+.DS_Store
